@@ -1,0 +1,21 @@
+{
+  "name": "parchapp-functions",
+  "private": true,
+  "description": "ParchApp Cloud Functions: BQ3 feedback loop and demo group membership",
+  "main": "index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\"",
+    "seed": "node scripts/seed.js",
+    "serve": "firebase emulators:start --only functions,firestore,auth",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "dependencies": {
+    "@google-cloud/bigquery": "^9.1.0",
+    "firebase-admin": "^14.5.0",
+    "firebase-functions": "^7.4.0"
+  }
+}
