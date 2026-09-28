@@ -1,0 +1,9 @@
+node_modules/
+*.log
+.firebase/
+functions/.env.local
+firebase-export-*/
+# Client config files belong in each app, not here.
+google-services.json
+GoogleService-Info.plist
+service-account*.json
