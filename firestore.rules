@@ -1,0 +1,72 @@
+rules_version = '2';
+
+// Shared by the Android (Java) and Flutter clients. The data shapes are described in docs/data-model.md.
+// The backend (Cloud Functions and scripts/seed.js) uses the Admin SDK, which skips these rules.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isMember(groupData) {
+      return signedIn() && request.auth.uid in groupData.memberIds;
+    }
+
+    function groupData(groupId) {
+      return get(/databases/$(database)/documents/groups/$(groupId)).data;
+    }
+
+    // Elements added or removed between two arrays.
+    function changed(before, after) {
+      return before.toSet().difference(after.toSet())
+          .union(after.toSet().difference(before.toSet()));
+    }
+
+    match /groups/{groupId} {
+      allow read: if isMember(resource.data);
+
+      // Groups are created by the backend only (seed script and new-user trigger).
+      allow create, delete: if false;
+
+      // Members may RSVP for themselves and manage pending invitations. Nothing else changes from a client.
+      allow update: if isMember(resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['goingIds', 'maybeIds', 'pendingInvites'])
+          && changed(resource.data.goingIds, request.resource.data.goingIds).hasOnly([request.auth.uid])
+          && changed(resource.data.maybeIds, request.resource.data.maybeIds).hasOnly([request.auth.uid])
+          && request.resource.data.pendingInvites.size() <= 50;
+    }
+
+    match /activities/{activityId} {
+      // Queries must filter by groupId so this rule can be checked.
+      allow read: if signedIn() && isMember(groupData(resource.data.groupId));
+
+      allow create: if signedIn()
+          && isMember(groupData(request.resource.data.groupId))
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.status in ['PROPOSED', 'CONFIRMED']
+          && request.resource.data.title is string
+          && request.resource.data.title.size() > 0
+          && request.resource.data.title.size() <= 120
+          && request.resource.data.keys().hasOnly(
+               ['groupId', 'title', 'category', 'date', 'time', 'location', 'status', 'createdBy', 'createdAt']);
+
+      // Only the organiser may confirm or edit their activity; groupId and createdBy never change.
+      allow update: if signedIn()
+          && resource.data.createdBy == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['title', 'category', 'date', 'time', 'location', 'status'])
+          && request.resource.data.status in ['PROPOSED', 'CONFIRMED'];
+
+      allow delete: if signedIn() && resource.data.createdBy == request.auth.uid;
+    }
+
+    // Written by the scheduled BQ3 function; read by both apps (feature F2, "Recommended" slot).
+    match /insights/{insightId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+  }
+}
