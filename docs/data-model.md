@@ -40,6 +40,49 @@ ref.update("goingIds", FieldValue.arrayUnion(uid), "maybeIds", FieldValue.arrayR
 // Flutter
 ref.update({'goingIds': FieldValue.arrayUnion([uid]), 'maybeIds': FieldValue.arrayRemove([uid])});
 ```
+## `schedules/{userId}`
+
+Stores the authenticated user's private calendar information.
+
+This collection is different from the shared `busy` blocks stored in group
+members. Shared availability continues to contain free/busy intervals only.
+
+The private schedule may contain full event details because Firestore security
+rules restrict access to the calendar owner.
+
+| Field | Type | Notes |
+|---|---|---|
+| `ownerId` | string | Firebase Auth UID of the schedule owner |
+| `source` | string | Calendar source, currently `google_calendar` |
+| `lastImportedAt` | timestamp | Last successful manual calendar import |
+| `importedCount` | integer | Number of imported calendar events |
+
+Only the authenticated user whose UID matches `{userId}` may read or write this
+document.
+
+### `schedules/{userId}/slots/{slotId}`
+
+Each document represents one calendar event imported into ParchApp.
+
+| Field | Type | Notes |
+|---|---|---|
+| `externalId` | string | Original Google Calendar event ID |
+| `title` | string | Event title |
+| `description` | string, optional | Event description |
+| `location` | string, optional | Event location |
+| `start` | timestamp | Event start time |
+| `end` | timestamp | Event end time |
+| `dayKey` | string | Local date in `YYYY-MM-DD` format |
+| `source` | string | Currently `google_calendar` |
+| `importedAt` | timestamp | Time when the event was imported into ParchApp |
+
+These documents contain private calendar information and are accessible only by
+their owner.
+
+They must not be used directly to expose another user's calendar details.
+
+Friend availability continues to use the privacy-safe `busy` representation
+defined in `groups/{groupId}.members[].busy`.
 
 ## `activities/{activityId}`
 

@@ -1,7 +1,7 @@
 rules_version = '2';
 
-// Shared by the Android (Java) and Flutter clients. The data shapes are described in docs/data-model.md.
-// The backend (Cloud Functions and scripts/seed.js) uses the Admin SDK, which skips these rules.
+// Shared by the Android (Java) and Flutter clients.
+// The data shapes are described in docs/data-model.md.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -19,66 +19,254 @@ service cloud.firestore {
 
     // Elements added or removed between two arrays.
     function changed(before, after) {
-      return before.toSet().difference(after.toSet())
+      return before.toSet()
+          .difference(after.toSet())
           .union(after.toSet().difference(before.toSet()));
     }
 
     function validDescription(data) {
       return !('description' in data)
-          || (data.description is string && data.description.size() <= 5000);
+          || (
+            data.description is string
+            && data.description.size() <= 5000
+          );
     }
 
+    // =========================================================
+    // GROUPS
+    // =========================================================
+
     match /groups/{groupId} {
+
       allow read: if isMember(resource.data);
 
-      // Groups are created by the backend only (seed script and new-user trigger).
+      // Groups are created by the backend only
+      // (seed script and new-user trigger).
       allow create, delete: if false;
 
-      // Members may RSVP for themselves and manage pending invitations. Nothing else changes from a client.
+      // Members may RSVP for themselves and manage pending
+      // invitations. Nothing else changes from a client.
       allow update: if isMember(resource.data)
-          && request.resource.data.diff(resource.data).affectedKeys()
-               .hasOnly(['goingIds', 'maybeIds', 'pendingInvites'])
-          && changed(resource.data.goingIds, request.resource.data.goingIds).hasOnly([request.auth.uid])
-          && changed(resource.data.maybeIds, request.resource.data.maybeIds).hasOnly([request.auth.uid])
+          && request.resource.data
+              .diff(resource.data)
+              .affectedKeys()
+              .hasOnly([
+                'goingIds',
+                'maybeIds',
+                'pendingInvites'
+              ])
+          && changed(
+                resource.data.goingIds,
+                request.resource.data.goingIds
+              ).hasOnly([request.auth.uid])
+          && changed(
+                resource.data.maybeIds,
+                request.resource.data.maybeIds
+              ).hasOnly([request.auth.uid])
           && request.resource.data.pendingInvites.size() <= 50;
     }
 
+    // =========================================================
+    // PRIVATE USER SCHEDULE
+    // =========================================================
+    //
+    // A user's imported Google Calendar is stored here.
+    //
+    // Full event information is PRIVATE.
+    // Only the owner can read/write it.
+    //
+    // Shared friend availability must NOT read event details.
+    // A separate free/busy projection will be used for that.
+    //
+    // Structure:
+    //
+    // schedules/{userId}
+    // schedules/{userId}/slots/{slotId}
+    //
+    // =========================================================
+
+    match /schedules/{userId} {
+
+      // Only the authenticated owner may read the schedule metadata.
+      allow read: if signedIn()
+          && request.auth.uid == userId;
+
+      // Only the owner may create/update their schedule metadata.
+      allow create, update: if signedIn()
+          && request.auth.uid == userId
+          && request.resource.data.ownerId == userId
+          && request.resource.data.source == 'google_calendar'
+          && request.resource.data.importedCount is int
+          && request.resource.data.importedCount >= 0
+          && request.resource.data.lastImportedAt is timestamp
+          && request.resource.data.keys().hasOnly([
+            'ownerId',
+            'source',
+            'lastImportedAt',
+            'importedCount'
+          ]);
+
+      // Only the owner may delete their schedule.
+      allow delete: if signedIn()
+          && request.auth.uid == userId;
+
+      // ---------------------------------------------------------
+      // PRIVATE CALENDAR SLOTS
+      // ---------------------------------------------------------
+
+      match /slots/{slotId} {
+
+        // Only the owner can see their imported event details.
+        allow read: if signedIn()
+            && request.auth.uid == userId;
+
+        // Only the owner can create or modify their slots.
+        allow create, update: if signedIn()
+            && request.auth.uid == userId
+
+            // Google Calendar source identifier.
+            && request.resource.data.externalId is string
+            && request.resource.data.externalId.size() > 0
+
+            // Event title.
+            && request.resource.data.title is string
+
+            // Description is optional.
+            && (
+              !('description' in request.resource.data)
+              || request.resource.data.description is string
+            )
+
+            // Location is optional.
+            && (
+              !('location' in request.resource.data)
+              || request.resource.data.location is string
+            )
+
+            // Calendar time range.
+            && request.resource.data.start is timestamp
+            && request.resource.data.end is timestamp
+            && request.resource.data.end > request.resource.data.start
+
+            // YYYY-MM-DD.
+            && request.resource.data.dayKey is string
+            && request.resource.data.dayKey.size() == 10
+
+            // Current supported source.
+            && request.resource.data.source == 'google_calendar'
+
+            // Audit/import information.
+            && request.resource.data.importedAt is timestamp
+
+            // Reject unexpected fields.
+            && request.resource.data.keys().hasOnly([
+              'externalId',
+              'title',
+              'description',
+              'location',
+              'start',
+              'end',
+              'dayKey',
+              'source',
+              'importedAt'
+            ]);
+
+        allow delete: if signedIn()
+            && request.auth.uid == userId;
+      }
+    }
+
+    // =========================================================
+    // ACTIVITIES
+    // =========================================================
+
     match /activities/{activityId} {
+
       // Queries must filter by groupId so this rule can be checked.
-      allow read: if signedIn() && isMember(groupData(resource.data.groupId));
+      allow read: if signedIn()
+          && isMember(groupData(resource.data.groupId));
 
       allow create: if signedIn()
           && isMember(groupData(request.resource.data.groupId))
           && request.resource.data.createdBy == request.auth.uid
           && request.resource.data.createdAt == request.time
-          && request.resource.data.status in ['PROPOSED', 'CONFIRMED']
+          && request.resource.data.status in [
+            'PROPOSED',
+            'CONFIRMED'
+          ]
           && request.resource.data.title is string
           && request.resource.data.title.size() > 0
           && request.resource.data.title.size() <= 120
           && validDescription(request.resource.data)
-          && request.resource.data.keys().hasOnly(
-               ['groupId', 'title', 'description', 'category', 'date', 'time', 'location', 'status', 'createdBy', 'createdAt']);
+          && request.resource.data.keys().hasOnly([
+            'groupId',
+            'title',
+            'description',
+            'category',
+            'date',
+            'time',
+            'location',
+            'status',
+            'createdBy',
+            'createdAt'
+          ]);
 
-      // Only the organiser may confirm or edit their activity; groupId and createdBy never change.
+      // Only the organiser may confirm or edit their activity;
+      // groupId and createdBy never change.
       allow update: if signedIn()
           && resource.data.createdBy == request.auth.uid
-          && request.resource.data.diff(resource.data).affectedKeys()
-               .hasOnly(['title', 'description', 'category', 'date', 'time', 'location', 'status'])
+          && request.resource.data
+              .diff(resource.data)
+              .affectedKeys()
+              .hasOnly([
+                'title',
+                'description',
+                'category',
+                'date',
+                'time',
+                'location',
+                'status'
+              ])
           && validDescription(request.resource.data)
-          // Canonical schedules must stay consistent with their display fields.
-          && (!('startTime' in resource.data)
-              || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['date', 'time']))
-          && request.resource.data.status in ['PROPOSED', 'CONFIRMED'];
 
-      allow delete: if signedIn() && resource.data.createdBy == request.auth.uid;
+          // Canonical schedules must stay consistent with
+          // their display fields.
+          && (
+            !('startTime' in resource.data)
+            || !request.resource.data
+                .diff(resource.data)
+                .affectedKeys()
+                .hasAny([
+                  'date',
+                  'time'
+                ])
+          )
+
+          && request.resource.data.status in [
+            'PROPOSED',
+            'CONFIRMED'
+          ];
+
+      allow delete: if signedIn()
+          && resource.data.createdBy == request.auth.uid;
     }
 
-    // Only the authenticated callable functions may record impressions and decisions.
+    // =========================================================
+    // SLOT RECOMMENDATIONS
+    // =========================================================
+
+    // Only authenticated callable functions may record
+    // impressions and decisions.
     match /slotRecommendations/{recommendationId} {
       allow read, write: if false;
     }
 
-    // Written by the scheduled BQ3 function; read by both apps (feature F2, "Recommended" slot).
+    // =========================================================
+    // INSIGHTS
+    // =========================================================
+
+    // Written by the scheduled BQ3 function.
+    // Read by signed-in clients.
     match /insights/{insightId} {
       allow read: if signedIn();
       allow write: if false;

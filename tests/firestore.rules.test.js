@@ -156,3 +156,106 @@ test("canonical schedules and recommendation analytics cannot be forged by clien
   await assertFails(setDoc(doc(as("mateo"), "slotRecommendations/fake"), {presentedAt: serverTimestamp()}));
   await assertFails(deleteDoc(analytics));
 });
+
+test("a user can create and read their own private schedule", async () => {
+  const db = as("alex");
+
+  const scheduleRef = doc(
+      db,
+      "schedules/alex",
+  );
+
+  await assertSucceeds(
+      setDoc(
+          scheduleRef,
+          {
+            ownerId: "alex",
+            source: "google_calendar",
+            lastImportedAt: serverTimestamp(),
+            importedCount: 1,
+          },
+      ),
+  );
+
+  await assertSucceeds(
+      getDoc(scheduleRef),
+  );
+});
+
+test("a user can create and read their own calendar slot", async () => {
+  const db = as("alex");
+
+  const slotRef = doc(
+      db,
+      "schedules/alex/slots/google-event-1",
+  );
+
+  await assertSucceeds(
+      setDoc(
+          slotRef,
+          {
+            externalId: "google-event-1",
+            title: "Mobile Applications",
+            description: "Sprint meeting",
+            location: "Universidad de los Andes",
+            start: new Date(
+                "2026-10-15T14:00:00Z",
+            ),
+            end: new Date(
+                "2026-10-15T15:00:00Z",
+            ),
+            dayKey: "2026-10-15",
+            source: "google_calendar",
+            importedAt: serverTimestamp(),
+          },
+      ),
+  );
+
+  await assertSucceeds(
+      getDoc(slotRef),
+  );
+});
+
+test("users cannot write slots into another user's schedule", async () => {
+  await assertFails(
+      setDoc(
+          doc(
+              as("stranger"),
+              "schedules/alex/slots/fake-event",
+          ),
+          {
+            externalId: "fake-event",
+            title: "Fake",
+            start: new Date(
+                "2026-10-15T14:00:00Z",
+            ),
+            end: new Date(
+                "2026-10-15T15:00:00Z",
+            ),
+            dayKey: "2026-10-15",
+            source: "google_calendar",
+            importedAt: serverTimestamp(),
+          },
+      ),
+  );
+});
+
+test("signed-out users cannot access private schedules", async () => {
+  await assertFails(
+      getDoc(
+          doc(
+              anonymous(),
+              "schedules/alex",
+          ),
+      ),
+  );
+
+  await assertFails(
+      getDoc(
+          doc(
+              anonymous(),
+              "schedules/alex/slots/event1",
+          ),
+      ),
+  );
+});
