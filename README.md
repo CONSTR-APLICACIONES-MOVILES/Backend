@@ -9,7 +9,7 @@ docs/data-model.md         Field-by-field contract both apps must follow
 functions/
   index.js                 Cloud Functions
   src/demoData.js          Demo groups, port of DemoData.java
-  src/insights.js          Computes BQ3 from presented recommendations and decisions
+  src/insights.js          Computes BQ3 from presented recommendations and decisions, and turns the BQ5 query result into insights/bq5_response_time
   src/activityRepository.js Firestore access for activities and recommendation records
   src/activityService.js  Activity Details and recommendation lifecycle
   src/availability.js     Availability engine and replaceable ranking strategy
@@ -29,6 +29,8 @@ tests/                     Security rules tests (Firestore emulator)
 | `presentActivityRecommendations` | Organizer callable | Acknowledges the candidates actually displayed, once per ID |
 | `acceptActivityRecommendation`, `modifyActivityRecommendation` | Organizer callable | Atomically records a decision and updates the activity schedule |
 | `getActivityRecommendationAnalytics` | Organizer callable | Per-activity BQ3 counts and percentage |
+| `refreshResponseTimeInsight` | Every day, 4:15 AM Bogotá | Runs `sql/bq5_response_time.sql` and writes the expected time until everyone answers an invitation, per group size, to `insights/bq5_response_time`. The Active Groups card shows it. This is the BQ5 Type 2 feedback loop |
+| `resetRsvpOnNewActivity` | New `activities` document | Empties `goingIds` and `maybeIds` of the activity's group, so every invitation starts with no answers (BQ5) |
 | `joinDemoGroupsOnSignUp` | New Firebase Auth account | Adds the account to the demo groups so a new user can RSVP and create activities immediately. Remove it once the apps can create and join groups |
 
 BQ1 and BQ8 aren't run by a function: set them up as BigQuery **scheduled queries** feeding the Looker Studio dashboard (see Setup, step 5).
@@ -75,7 +77,7 @@ FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run seed -- --project demo-parchapp
    gcloud auth application-default login
    npm --prefix functions run seed -- --project <project-id>
    ```
-5. **Analytics → BigQuery.** In Project settings -> Integrations, link BigQuery with daily export. For BQ1 and BQ8, paste `functions/sql/bq1_*.sql` and `bq8_*.sql` into BigQuery as scheduled queries (replace the table placeholder with your project and `analytics_<property id>` dataset) and connect their destination tables to Looker Studio. BQ3 runs from backend Firestore records and no longer requires `ANALYTICS_DATASET`; its SQL is an optional client-event mirror described in the Activity API contract.
+5. **Analytics → BigQuery.** In Project settings -> Integrations, link BigQuery with daily export. For BQ1 and BQ8, paste `functions/sql/bq1_*.sql` and `bq8_*.sql` into BigQuery as scheduled queries (replace the table placeholder with your project and `analytics_<property id>` dataset) and connect their destination tables to Looker Studio. Put the dataset name in `functions/.env` as `ANALYTICS_DATASET`: `refreshResponseTimeInsight` (BQ5) reads it. BQ3 runs from backend Firestore records and does not use it; its SQL is an optional client-event mirror described in the Activity API contract.
 6. Deploy the functions. This needs the **Blaze** (pay-as-you-go) plan, and it stays in the free tier at this scale:
    ```bash
    npm run deploy:functions
