@@ -125,3 +125,34 @@ test("seeded groups match the fields the apps read", async () => {
     assert.ok(key in data, `missing ${key}`);
   }
 });
+
+test("optional descriptions are bounded and can be edited by the organizer", async () => {
+  const ref = doc(as("alex"), "activities/described");
+  await assertSucceeds(setDoc(ref, {...newActivity("alex"), description: "Bring notes"}));
+  await assertSucceeds(updateDoc(ref, {description: "Bring your book"}));
+  await assertFails(updateDoc(ref, {description: 42}));
+  await assertFails(updateDoc(ref, {description: "x".repeat(5001)}));
+  await assertFails(updateDoc(doc(as("mateo"), "activities/described"), {description: "Someone else's activity"}));
+});
+
+test("canonical schedules and recommendation analytics cannot be forged by clients", async () => {
+  await assertFails(setDoc(doc(as("alex"), "activities/scheduled"), {
+    ...newActivity("alex"), startTime: new Date(), endTime: new Date(), durationMinutes: 60,
+  }));
+  const ref = doc(as("mateo"), "activities/a1");
+  await assertFails(updateDoc(ref, {durationMinutes: 60}));
+  await env.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), "activities/a1"), {
+      startTime: new Date("2026-10-02T15:00:00Z"), endTime: new Date("2026-10-02T16:00:00Z"), durationMinutes: 60,
+    });
+    await setDoc(doc(context.firestore(), "slotRecommendations/r1"), {activityId: "a1", outcome: null});
+  });
+  await assertFails(updateDoc(ref, {time: "11:00"}));
+  await assertFails(updateDoc(ref, {date: "tomorrow"}));
+  await assertSucceeds(updateDoc(ref, {description: "Schedule stays consistent", status: "CONFIRMED"}));
+  const analytics = doc(as("mateo"), "slotRecommendations/r1");
+  await assertFails(getDoc(analytics));
+  await assertFails(updateDoc(analytics, {outcome: "ACCEPTED_UNCHANGED"}));
+  await assertFails(setDoc(doc(as("mateo"), "slotRecommendations/fake"), {presentedAt: serverTimestamp()}));
+  await assertFails(deleteDoc(analytics));
+});

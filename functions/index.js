@@ -8,25 +8,32 @@ const logger = require("firebase-functions/logger");
 const {BigQuery} = require("@google-cloud/bigquery");
 
 const {demoGroups, memberForAccount} = require("./src/demoData");
-const {loadQuery, buildSlotInsight, buildResponseTimeInsight} = require("./src/insights");
+const {loadQuery, buildRecommendationInsight, buildResponseTimeInsight} = require("./src/insights");
+const {ActivityRepository} = require("./src/activityRepository");
+const {ActivityService} = require("./src/activityService");
+const {createActivityCallables} = require("./src/activityCallables");
 
 initializeApp();
 
-// Firebase Analytics export dataset, for example analytics_123456789. Set in functions/.env.
 const analyticsDataset = defineString("ANALYTICS_DATASET");
 
-/* BQ3 feedback loop (Type 2): every night, runs the BQ3 query and writes the slot position that organisers accept most often without changes to insights/bq3_slot_acceptance. Both apps read that document and mark the slot as "Recommended" (feature F2).
+const activityRepository = new ActivityRepository(getFirestore());
+const activityService = new ActivityService(activityRepository);
+Object.assign(exports, createActivityCallables(activityService));
+
+/* BQ3 feedback loop: use server records, including displayed but unselected slots.
+ * The shared service/repository instance is the analytics facade for both clients.
  */
 exports.refreshSlotRecommendation = onSchedule(
     {schedule: "every day 04:00", timeZone: "America/Bogota", region: "us-central1"},
     async () => {
-      const projectId = process.env.GCLOUD_PROJECT;
-      const query = loadQuery("bq3_slot_acceptance.sql", projectId, analyticsDataset.value());
-      const [rows] = await new BigQuery().query({query});
-
-      const insight = buildSlotInsight(rows);
+      const until = new Date();
+      const since = new Date(until.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const insight = buildRecommendationInsight(await activityRepository.presentedSince(since, until));
       await getFirestore().doc("insights/bq3_slot_acceptance").set({
         ...insight,
+        window_start: since,
+        window_end: until,
         updated_at: FieldValue.serverTimestamp(),
       });
       logger.info("BQ3 insight updated", {

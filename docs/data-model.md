@@ -49,13 +49,16 @@ Created by clients with an auto-generated ID.
 |---|---|---|
 | `groupId` | string | The author must be a member of this group |
 | `title` | string | 1 to 120 characters |
+| `description` | string, optional | Up to 5000 characters; missing means an empty description |
 | `category` | string | `study`, `sports`, `social` or `other` (BQ10) |
 | `date`, `time`, `location` | string | Free text for now, may be empty |
 | `status` | string | `PROPOSED` or `CONFIRMED` |
 | `createdBy` | string | Must equal the author's UID |
 | `createdAt` | timestamp | Must be `FieldValue.serverTimestamp()` |
+| `startTime`, `endTime` | timestamp, optional | Backend-managed canonical schedule; callable DTOs serialize these as UTC ISO strings |
+| `durationMinutes` | integer, optional | Backend-managed duration (15–720 minutes) |
 
-No other fields are allowed. Only the author can edit, confirm or delete an activity, and `groupId`/`createdBy` never change. **Queries must filter by `groupId`**, otherwise the rules reject them:
+Clients may create the original fields plus `description`. Only the author can edit, confirm or delete an activity, and `groupId`/`createdBy` never change. Canonical schedule fields can only be written through the recommendation decision callables. After those fields exist, direct client edits of `date`/`time` are rejected to prevent inconsistent schedules. Legacy activities remain readable without a migration. **Queries must filter by `groupId`**, otherwise the rules reject them:
 
 ```dart
 db.collection('activities').where('groupId', isEqualTo: groupId).orderBy('createdAt', descending: true);
@@ -63,16 +66,41 @@ db.collection('activities').where('groupId', isEqualTo: groupId).orderBy('create
 
 That query uses the composite index in `firestore.indexes.json`.
 
+Activity Details, participant availability, recommendation DTOs and Java/Flutter
+call examples are documented in [activity-api.md](activity-api.md).
+
+## `slotRecommendations/{recommendationId}`
+
+Backend-only records; direct client reads/writes are denied. `ActivityRepository`
+accesses them for the authenticated callable service and scheduled insight.
+
+| Fields | Meaning |
+|---|---|
+| `activityId`, `organizerId`, `batchId`, `position` | Activity/organizer association, generated list ID, zero-based rank |
+| `startTime`, `endTime` | Immutable suggested instants, UTC ISO strings |
+| `availableParticipants`, `totalParticipants`, `score`, `reasons` | Candidate DTO data |
+| `participantIds`, `minimumNoticeMinutes` | Context for acceptance revalidation |
+| `generatedAt`, `presentedAt`, `decidedAt` | Server timestamps; presentation and decision initially null |
+| `outcome` | null, `ACCEPTED_UNCHANGED`, `MODIFIED`, or `NOT_SELECTED` |
+| `selectedStartTime`, `selectedEndTime` | Actual selected instants once the batch is decided |
+
+Each candidate counts once when its organizer acknowledges display. Transactions
+make presentation and decision retries idempotent and permit one decision per
+batch. Choosing a slot updates the activity and all batch outcomes atomically.
+
 ## `insights/bq3_slot_acceptance`
 
-Written every night by `refreshSlotRecommendation`. Clients can read it but not write it.
+Written every night by `refreshSlotRecommendation` from backend recommendation
+records first presented within the preceding 30 days. Clients can read it but not write it.
 
 | Field | Type | Notes |
 |---|---|---|
-| `recommended_position` | number | Slot position (0 = best match) to mark as "Recommended". Stays `0` until at least 20 accepted slots have been logged |
+| `recommended_position` | number | Position with highest unchanged acceptance rate; defaults to `0` until 20 presentations and one unchanged acceptance |
 | `pct_unchanged_overall` | number or null | BQ3 answer: % of suggested slots accepted without changes |
-| `sample_size` | number | Accepted slots in the last 30 days |
-| `by_position` | array | `{slot_position, accepted, accepted_unchanged}` |
+| `sample_size`, `recommendations_presented` | number | Presented candidates in the cohort, including unselected/undecided candidates |
+| `accepted_recommendations_unchanged` | number | Presented candidates accepted unchanged |
+| `by_position` | array | `{slot_position, presented, accepted, accepted_unchanged}`; accepted includes modified choices |
+| `window_start`, `window_end` | timestamp | Presentation cohort boundaries |
 | `updated_at` | timestamp | |
 
 If the document is missing or can't be read, clients should use position `0`, as `FirestoreInsightsRepository` does.
@@ -103,12 +131,17 @@ If the document is missing or can't be read, clients show no estimate.
 
 ## Analytics events
 
-The events are not stored in Firestore. Both apps send them to Firebase Analytics with these exact names, because the queries in `functions/sql/` depend on them. The source of truth is `AnalyticsEvents.java` in the Android app.
+The events below are Firebase Analytics events. BQ1/BQ8 keep their existing client
+contract. BQ3 now uses authoritative `slotRecommendations` Firestore records;
+clients may optionally mirror successful presentation/decision calls to the
+events below to use the updated SQL. Legacy `slot_accepted` events without
+recommendation IDs do not establish a BQ3 denominator.
 
 | Event | Parameters | Question |
 |---|---|---|
 | `availability_calc` | `group_size`, `duration_ms`, `slot_count`, `ranker`, `source` | BQ1 |
-| `slot_accepted` | `group_size`, `slot_position`, `recommended_position`, `modified` (0/1) | BQ3 |
+| `slot_presented` | `recommendation_id`, `slot_position` | Optional BQ3 mirror, one event per displayed candidate |
+| `slot_accepted` | `recommendation_id`, `slot_position`, `modified` (0/1); existing `group_size`/`recommended_position` may remain | Optional BQ3 decision mirror |
 | `feature_used` | `feature` (`groups`, `compare_availability`, `schedule`, `invitations`, `alerts`), `screen` | BQ8 |
 | `activity_created` | `category`, `source` | |
 | `rsvp_submitted` | `activity_id` (string), `group_size` (int), `response_ms` (int), `response` (`going`/`maybe`) | BQ5 |

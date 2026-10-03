@@ -5,7 +5,7 @@
   "scripts": {
     "test": "npm run test:functions && npm run test:rules",
     "test:functions": "npm --prefix functions test",
-    "test:rules": "firebase emulators:exec --only firestore --project demo-parchapp \"node --test \\\"tests/**/*.test.js\\\"\"",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-parchapp \"node --test --test-concurrency=1 \\\"tests/**/*.test.js\\\"\"",
     "emulators": "firebase emulators:start --project demo-parchapp",
     "deploy:rules": "firebase deploy --only firestore:rules,firestore:indexes",
     "deploy:functions": "firebase deploy --only functions"
