@@ -23,6 +23,11 @@ service cloud.firestore {
           .union(after.toSet().difference(before.toSet()));
     }
 
+    function validDescription(data) {
+      return !('description' in data)
+          || (data.description is string && data.description.size() <= 5000);
+    }
+
     match /groups/{groupId} {
       allow read: if isMember(resource.data);
 
@@ -50,17 +55,27 @@ service cloud.firestore {
           && request.resource.data.title is string
           && request.resource.data.title.size() > 0
           && request.resource.data.title.size() <= 120
+          && validDescription(request.resource.data)
           && request.resource.data.keys().hasOnly(
-               ['groupId', 'title', 'category', 'date', 'time', 'location', 'status', 'createdBy', 'createdAt']);
+               ['groupId', 'title', 'description', 'category', 'date', 'time', 'location', 'status', 'createdBy', 'createdAt']);
 
       // Only the organiser may confirm or edit their activity; groupId and createdBy never change.
       allow update: if signedIn()
           && resource.data.createdBy == request.auth.uid
           && request.resource.data.diff(resource.data).affectedKeys()
-               .hasOnly(['title', 'category', 'date', 'time', 'location', 'status'])
+               .hasOnly(['title', 'description', 'category', 'date', 'time', 'location', 'status'])
+          && validDescription(request.resource.data)
+          // Canonical schedules must stay consistent with their display fields.
+          && (!('startTime' in resource.data)
+              || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['date', 'time']))
           && request.resource.data.status in ['PROPOSED', 'CONFIRMED'];
 
       allow delete: if signedIn() && resource.data.createdBy == request.auth.uid;
+    }
+
+    // Only the authenticated callable functions may record impressions and decisions.
+    match /slotRecommendations/{recommendationId} {
+      allow read, write: if false;
     }
 
     // Written by the scheduled BQ3 function; read by both apps (feature F2, "Recommended" slot).
