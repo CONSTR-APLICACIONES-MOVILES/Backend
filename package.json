@@ -6,7 +6,11 @@
     "test": "npm run test:functions && npm run test:rules",
     "test:functions": "npm --prefix functions test",
     "test:rules": "firebase emulators:exec --only firestore --project demo-parchapp \"node --test --test-concurrency=1 \\\"tests/**/*.test.js\\\"\"",
-    "emulators": "firebase emulators:start --project demo-parchapp",
+    "emulators": "node scripts/start-emulators.cjs",
+    "emulators:save": "firebase emulators:export ./.emulator-data --project demo-parchapp --force",
+    "emulators:stop": "node scripts/stop-emulators.cjs",
+    "seed:testing": "node functions/scripts/seed-testing.cjs",
+    "verify:testing": "node functions/scripts/seed-testing.cjs --verify-only",
     "deploy:rules": "firebase deploy --only firestore:rules,firestore:indexes",
     "deploy:functions": "firebase deploy --only functions"
   },

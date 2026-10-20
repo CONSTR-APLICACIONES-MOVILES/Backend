@@ -1,0 +1,6 @@
+# Backend is JavaScript. Dart templates inside installed npm packages are not
+# part of the Flutter application and do not have their own Flutter packages.
+analyzer:
+  exclude:
+    - "**/node_modules/**"
+    - ".emulator-data/**"

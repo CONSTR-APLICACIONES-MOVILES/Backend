@@ -4,6 +4,7 @@ node_modules/
 build-projects-check.json
 *.log
 .firebase/
+.emulator-data/
 functions/.env.local
 firebase-export-*/
 # Client config files belong in each app, not here.
