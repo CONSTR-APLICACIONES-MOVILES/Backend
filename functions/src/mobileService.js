@@ -1,5 +1,11 @@
 const {requireThat, documentId, integer} = require("./errors");
 const {localDate, dayStart, MINUTE, hasSchedule} = require("./availability");
+const {ActivityLifecycle} = require('./activityLifecycle');
+
+const {CommunityService, canShare, effectiveStatus, defaults} = require('./communityService');
+
+const {ExpansionService} = require('./expansionService');
+const {additionalAlerts} = require('./alertEvents');
 
 const DAY = 1440 * MINUTE;
 function validDate(value) {
@@ -16,16 +22,51 @@ class MobileService {
   constructor(db, {clock = () => new Date(), userLookup} = {}) {
     this.db = db;
     this.clock = clock;
+    this.lifecycle = new ActivityLifecycle(db, {clock});
     this.userLookup = userLookup || ((uid) => require("firebase-admin/auth").getAuth().getUser(uid));
+    this.expansions = new ExpansionService(db, {clock, userLookup: this.userLookup});
+    this.community = new CommunityService(db, {clock, userLookup: this.userLookup});
   }
+
+  getCommunityPeers(uid, input) { return this.community.getCommunityPeers(uid, input); }
+  createGroup(uid, input) { return this.community.createGroup(uid, input); }
+  getGroupInvitations(uid, input) { return this.community.getGroupInvitations(uid, input); }
+  respondGroupInvitation(uid, input) { return this.community.respondGroupInvitation(uid, input); }
+  revokeGroupInvitation(uid, input) { return this.community.revokeGroupInvitation(uid, input); }
+  getGroupDetails(uid, input) { return this.community.getGroupDetails(uid, input); }
+  async updatePresence(uid, input) { await this.community.updatePresence(uid, input); return this.getProfile(uid); }
+  async updatePreferences(uid, input) { await this.community.updatePreferences(uid, input); return this.getProfile(uid); }
+
+  discover(uid, input) { return this.expansions.discover(uid, input); }
+  getSharedProfile(uid, input) { return this.expansions.getSharedProfile(uid, input); }
+  getActivityMaterials(uid, input) { return this.expansions.getActivityMaterials(uid, input); }
+  saveActivityMaterials(uid, input) { return this.expansions.saveActivityMaterials(uid, input); }
+  setTopicCompletion(uid, input) { return this.expansions.setTopicCompletion(uid, input); }
+  createShareLink(uid, input) { return this.expansions.createShareLink(uid, input); }
+  resolveShareLink(uid, input) { return this.expansions.resolveShareLink(uid, input); }
+  joinSharedGroup(uid, input) { return this.expansions.joinSharedGroup(uid, input); }
+  getShareLinks(uid, input) { return this.expansions.getShareLinks(uid, input); }
+  revokeShareLink(uid, input) { return this.expansions.revokeShareLink(uid, input); }
+  exportActivityCalendar(uid, input) { return this.expansions.exportActivityCalendar(uid, input); }
+  getCalendarImportStatus(uid, input) { return this.expansions.getCalendarImportStatus(uid, input); }
 
   async groups(uid) {
     return (await this.db.collection("groups").where("memberIds", "array-contains", uid).get()).docs;
   }
 
-  async getScheduleFriends(uid) {
+  validatePlanningSlot(uid, input) { return this.lifecycle.validatePlanningSlot(uid, input); }
+  publishActivity(uid, input) { return this.lifecycle.publishActivity(uid, input); }
+  updateActivityDetails(uid, input) { return this.lifecycle.mutate(uid, input, false); }
+  cancelActivity(uid, input) { return this.lifecycle.mutate(uid, input, true); }
+
+  async getScheduleFriends(uid, input = {}) {
     const friends = new Map();
-    for (const doc of await this.groups(uid)) {
+    const groups = await this.groups(uid);
+    if (input.groupId) {
+      documentId(input.groupId, 'groupId');
+      requireThat(groups.some(g => g.id === input.groupId), 'permission-denied', 'Group membership is required.');
+    }
+    for (const doc of groups.filter(g => !input.groupId || g.id === input.groupId)) {
       for (const member of doc.data().members || []) {
         if (member.id !== uid) friends.set(member.id,
             {id: member.id, name: member.name, initials: member.initials || ""});
@@ -48,6 +89,7 @@ class MobileService {
         "permission-denied", "Only members of your shared groups may be compared.");
     const today = localDate(this.clock());
     const schedules = await Promise.all([uid, ...input.friendIds].map(async (ownerId) => {
+      if (!await canShare(this.db, ownerId, uid, "scheduleVisibility")) return {ownerId, known: false, busy: [], updatedAt: null};
       const snapshot = await this.db.doc(`availability/${ownerId}/days/${date}`).get();
       const saved = snapshot.data();
       const legacy = peers.get(ownerId);
@@ -92,15 +134,22 @@ class MobileService {
     const groups = await this.groups(uid);
     requireThat(groups.length + days < 450, "resource-exhausted", "Too many groups for one import.");
     await this.db.runTransaction(async (tx) => {
+      const preferences = (await tx.get(this.db.doc(`profiles/${uid}`))).data()?.preferences;
+      const shareWithGroups = !preferences?.scheduleVisibility || preferences.scheduleVisibility === 'groups';
       const currentGroups = groups.length ? await tx.getAll(...groups.map((g) => g.ref)) : [];
       for (const day of byDate) tx.set(this.db.doc(`availability/${uid}/days/${day.date}`),
           {...day, updatedAt: this.clock(), source: "google"});
+      tx.set(this.db.doc(`calendarImports/${uid}`), {lastImportedAt: this.clock(), startDate, days, source: "google"});
       // Preserve the existing Java representation and every other member's data.
       for (const group of currentGroups) {
         const data = group.data();
         if (!data?.memberIds.includes(uid)) continue;
-        tx.update(group.ref, {members: data.members.map((member) => member.id === uid ?
-          {...member, busy: byDate[0].busy, busyDate: startDate, calendarSync: true} : member)});
+        tx.update(group.ref, {members: data.members.map((member) => {
+          if (member.id !== uid) return member;
+          if (shareWithGroups) return {...member, busy: byDate[0].busy, busyDate: startDate, calendarSync: true};
+          const {busy, busyDate, ...identity} = member;
+          return {...identity, calendarSync: true};
+        })});
       }
     });
     return {days, intervals: intervals.length};
@@ -113,12 +162,14 @@ class MobileService {
     const activities = (await Promise.all(groups.map((g) => this.db.collection("activities")
         .where("groupId", "==", g.id).get()))).flatMap((s) => s.docs);
     // No attendance tracking exists yet; never fabricate an on-time percentage.
-    return {...profile.data(), id: uid,
+    return {...profile.data(), status: effectiveStatus(profile.data() || {}, this.clock()),
+      statusExpiresAt: iso(profile.data()?.statusExpiresAt),
+      preferences: {...defaults, ...profile.data()?.preferences}, id: uid,
       name: profile.data()?.name || user.displayName || user.email || "",
       verified: !!user.emailVerified, activeGroups: groups.length,
       plansCompleted: activities.filter((a) => {
         const data = a.data();
-        return data.createdBy === uid && data.status === "CONFIRMED" && data.endTime &&
+        return !data.cancelled && data.createdBy === uid && data.status === "CONFIRMED" && data.endTime &&
           Date.parse(iso(data.endTime)) <= this.clock().getTime();
       }).length, onTimeRate: null};
   }
@@ -153,7 +204,7 @@ class MobileService {
     requireThat(groups.length < 450, "resource-exhausted", "Too many groups for one profile update.");
     await this.db.runTransaction(async (tx) => {
       const current = groups.length ? await tx.getAll(...groups.map((g) => g.ref)) : [];
-      tx.set(this.db.doc(`profiles/${uid}`), {...fields, updatedAt: this.clock()}, {merge: true});
+      tx.set(this.db.doc(`profiles/${uid}`), {...fields, ...(fields.status !== undefined ? {statusExpiresAt: null} : {}), updatedAt: this.clock()}, {merge: true});
       if (fields.name !== undefined) {
         const words = fields.name.trim().split(/\s+/);
         const initials = (words[0][0] + (words.length > 1 ? words[words.length - 1][0] : "")).toUpperCase();
@@ -165,36 +216,50 @@ class MobileService {
         }
       }
     });
-    return {...before, ...fields};
+    return {...before, ...fields, ...(fields.status !== undefined ? {statusExpiresAt: null} : {})};
   }
 
   async getAlerts(uid) {
     const groups = await this.groups(uid);
     const pages = await Promise.all(groups.map((g) => this.db.collection("activities")
         .where("groupId", "==", g.id).orderBy("createdAt", "desc").limit(100).get()));
-    const activities = pages.flatMap((s) => s.docs).filter((a) => a.data().createdBy !== uid)
+    const activities = pages.flatMap((s) => s.docs).filter((a) => a.data().createdBy !== uid && !a.data().cancelled &&
+          (!a.data().participantIds || a.data().participantIds.includes(uid)))
         .sort((a, b) => Date.parse(iso(b.data().createdAt)) - Date.parse(iso(a.data().createdAt))).slice(0, 200);
-    if (!activities.length) return {alerts: []};
+    const extra = await additionalAlerts(this.db,uid,groups,pages.flatMap(p=>p.docs),this.clock());
+    if (!activities.length) return {alerts: extra};
     const states = await this.db.getAll(...activities.map((a) => this.db.doc(`inboxes/${uid}/items/${a.id}`)));
-    return {alerts: activities.map((a, index) => ({id: a.id, title: a.data().title,
-      groupSize: groups.find((g) => g.id === a.data().groupId).data().memberIds.length,
+    const invitations = activities.map((a, index) => ({kind: "invitation", id: a.id, title: a.data().title,
+      groupSize: (a.data().participantIds || groups.find((g) => g.id === a.data().groupId).data().memberIds).length,
       description: [a.data().description, a.data().location, a.data().date, a.data().time].filter(Boolean).join(" • "),
       createdAt: iso(a.data().createdAt), isRead: states[index].data()?.isRead || false,
-      response: states[index].data()?.response || null, studySessionId: a.id}))};
+      response: states[index].data()?.response || null, studySessionId: a.id}));
+    return {alerts: [...invitations,...extra].sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt)).slice(0,200)};
   }
 
   async getActivities(uid) {
     const groups = await this.groups(uid);
     const pages = await Promise.all(groups.map((g) => this.db.collection("activities")
         .where("groupId", "==", g.id).orderBy("createdAt", "desc").limit(100).get()));
-    return {activities: pages.flatMap((s) => s.docs)
-        .sort((a, b) => Date.parse(iso(b.data().createdAt)) - Date.parse(iso(a.data().createdAt)))
-        .slice(0, 200).map((doc) => ({id: doc.id, title: doc.data().title,
-          groupId: doc.data().groupId, date: doc.data().date || "", time: doc.data().time || "",
-          location: doc.data().location || "", status: doc.data().status}))};
+    const records = pages.flatMap(s => s.docs)
+      .sort((a, b) => Date.parse(iso(b.data().createdAt)) - Date.parse(iso(a.data().createdAt))).slice(0, 200);
+    return {activities: await Promise.all(records.map(async doc => {
+      const activity = doc.data();
+      const group = groups.find(g => g.id === activity.groupId).data();
+      const ids = (activity.participantIds || group.memberIds).filter(id => group.memberIds.includes(id));
+      const states = ids.length ? await this.db.getAll(...ids.map(id => this.db.doc(`inboxes/${id}/items/${doc.id}`))) : [];
+      const counts = {accepted: 0, maybe: 0, declined: 0, pending: 0, total: ids.length};
+      ids.forEach((id, i) => { const response = id === activity.createdBy ? 'accepted' : states[i].data()?.response;
+        counts[response || 'pending']++; });
+      return {id: doc.id, title: activity.title, groupId: activity.groupId,
+        date: activity.date || '', time: activity.time || '', location: activity.location || '',
+        status: activity.status, cancelled: !!activity.cancelled,
+        startTime: iso(activity.startTime), endTime: iso(activity.endTime), timeZone: activity.timeZone || 'America/Bogota',
+        attendance: counts};
+    }))};
   }
 
-  async requireInvitation(tx, uid, id) {
+  async requireInvitation(tx, uid, id, responding = false) {
     documentId(id, "activityId");
     const activity = (await tx.get(this.db.doc(`activities/${id}`))).data();
     requireThat(activity, "not-found", "Activity not found.");
@@ -202,14 +267,27 @@ class MobileService {
     const group = (await tx.get(groupRef)).data();
     requireThat(group?.memberIds.includes(uid) && activity.createdBy !== uid,
         "permission-denied", "This invitation is not available to you.");
+    requireThat(!activity.participantIds || activity.participantIds.includes(uid),
+        "permission-denied", "You are not invited to this activity.");
+    requireThat(!responding || !activity.cancelled, "failed-precondition", "This activity is cancelled.");
     return {activity, groupRef};
+  }
+
+  async markNotificationEventsRead(uid, input) {
+    requireThat(Array.isArray(input.ids) && input.ids.every(id => /^(evt|grp|rem)_[a-f0-9]{64}$/.test(id)), 'invalid-argument', 'Supply event notification IDs.');
+    return this.markAlertsRead(uid,input);
   }
 
   async markAlertsRead(uid, input) {
     requireThat(Array.isArray(input.ids) && input.ids.length <= 200 && new Set(input.ids).size === input.ids.length,
         "invalid-argument", "Supply up to 200 distinct alert IDs.");
+    const currentAlerts = (await this.getAlerts(uid)).alerts;
+    const extraIds = new Set(currentAlerts.filter(a=>a.kind !== 'invitation').map(a=>a.id));
     await this.db.runTransaction(async (tx) => {
-      for (const id of input.ids) await this.requireInvitation(tx, uid, id);
+      for (const id of input.ids) {
+        documentId(id,'alertId');
+        if (!extraIds.has(id)) await this.requireInvitation(tx, uid, id);
+      }
       for (const id of input.ids) tx.set(this.db.doc(`inboxes/${uid}/items/${id}`),
           {isRead: true}, {merge: true});
     });
@@ -219,7 +297,7 @@ class MobileService {
   async respondToActivityInvitation(uid, input) {
     requireThat(["accepted", "maybe", "declined"].includes(input.response), "invalid-argument", "Invalid invitation response.");
     await this.db.runTransaction(async (tx) => {
-      await this.requireInvitation(tx, uid, input.id);
+      await this.requireInvitation(tx, uid, input.id, true);
       const ref = this.db.doc(`inboxes/${uid}/items/${input.id}`);
       const existing = (await tx.get(ref)).data();
       requireThat(!existing?.response || existing.response === input.response,

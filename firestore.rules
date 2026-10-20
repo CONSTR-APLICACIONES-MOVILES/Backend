@@ -62,6 +62,7 @@ service cloud.firestore {
       // Only the organiser may confirm or edit their activity; groupId and createdBy never change.
       allow update: if signedIn()
           && resource.data.createdBy == request.auth.uid
+          && resource.data.get('cancelled', false) == false
           && request.resource.data.diff(resource.data).affectedKeys()
                .hasOnly(['title', 'description', 'category', 'date', 'time', 'location', 'status'])
           && validDescription(request.resource.data)

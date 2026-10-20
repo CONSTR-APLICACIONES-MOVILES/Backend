@@ -1,9 +1,22 @@
 const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {ServiceError} = require("./errors");
 const FIELDS = {
-  getScheduleFriends: [], getScheduleDay: ["date", "friendIds"],
+  discover: ['query','kind','category','cursor','limit'], getSharedProfile: ['userId'],
+  getActivityMaterials: ['activityId'], saveActivityMaterials: ['activityId','expectedVersion','topics','resources','clientUserId'], setTopicCompletion: ['activityId','topicId','completed','clientUserId'],
+  createShareLink: ['requestId','kind','entityId','hours','clientUserId'], resolveShareLink: ['token'], joinSharedGroup: ['token','clientUserId'],
+  getShareLinks: ['entityId'], revokeShareLink: ['linkId','clientUserId'], exportActivityCalendar: ['activityId'], getCalendarImportStatus: [],
+  getCommunityPeers: [], createGroup: ["requestId", "name", "category", "inviteeIds"],
+  getGroupInvitations: [], respondGroupInvitation: ["groupId", "response"],
+  revokeGroupInvitation: ["groupId", "inviteeId"], getGroupDetails: ["groupId"],
+  updatePresence: ["status", "visibility", "expiresAt", "clientUserId"], updatePreferences: ["preferences", "clientUserId"],
+  validatePlanningSlot: ['participantIds', 'groupId', 'sourceSlotId', 'startTime', 'endTime', 'timeZone'],
+  publishActivity: ['requestId', 'groupId', 'fields', 'participantIds', 'startTime', 'endTime', 'timeZone', 'comparisonId'],
+  updateActivityDetails: ['activityId', 'expectedVersion', 'fields'],
+  cancelActivity: ['activityId', 'expectedVersion'],
+  getScheduleFriends: ["groupId"], getScheduleDay: ["date", "friendIds"],
   importCalendarAvailability: ["startDate", "days", "intervals"],
   getProfile: [], updateProfile: ["fields", "clientUserId"], getAlerts: [], getActivities: [],
+  markNotificationEventsRead: ["ids", "clientUserId"],
   markAlertsRead: ["ids", "clientUserId"], respondToActivityInvitation: ["id", "response", "clientUserId"],
 };
 function createMobileCallables(service) {

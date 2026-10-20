@@ -1,7 +1,7 @@
 const {initializeApp} = require("firebase-admin/app");
 const {getFirestore, FieldValue} = require("firebase-admin/firestore");
 const {onSchedule} = require("firebase-functions/v2/scheduler");
-const {onDocumentCreated} = require("firebase-functions/v2/firestore");
+const {onDocumentCreated, onDocumentWritten} = require("firebase-functions/v2/firestore");
 const {defineString} = require("firebase-functions/params");
 const functionsV1 = require("firebase-functions/v1");
 const logger = require("firebase-functions/logger");
@@ -82,3 +82,13 @@ exports.joinDemoGroupsOnSignUp = functionsV1.auth.user().onCreate(async (user) =
   await joinDemoGroups(db, user);
   logger.info("New account joined the demo groups", {uid: user.uid});
 });
+
+
+// Firestore source also covers compatible Java edits. Deterministic event IDs
+// make repeated trigger delivery safe without manufacturing push delivery.
+exports.activityChangesToInbox = onDocumentWritten(
+    {document: 'activities/{activityId}', region: 'us-central1'}, async event => {
+      const {recordActivityChange} = require('./src/alertEvents');
+      await recordActivityChange(getFirestore(), event.params.activityId,
+        event.data?.before.data(), event.data?.after.data(), event.data?.after.updateTime?.toString(), event.data?.after.updateTime?.toDate());
+    });

@@ -47,11 +47,11 @@ class ActivityService {
     return this.repository.withActivity(input.activityId, async (context) => {
       authorize(context, uid, organizer);
       return work(context);
-    }, {date: localDate(this.clock())});
+    }, {date: localDate(this.clock()), viewer: uid});
   }
 
   getActivity(uid, input) {
-    return this.withActivity(uid, input, false, ({activity, group, activityResponses = {}}) => {
+    return this.withActivity(uid, input, false, ({activity, group, activityResponses = {}, version}) => {
       const startTime = iso(activity.startTime);
       const endTime = iso(activity.endTime);
       const today = localDate(this.clock());
@@ -60,14 +60,15 @@ class ActivityService {
       const end = endTime ? (Date.parse(endTime) - midnight) / MINUTE : -1;
       const known = start >= 0 && start < end && end <= 1440;
       return {
+        version, cancelled: activity.cancelled === true,
         id: input.activityId, groupId: activity.groupId, createdBy: activity.createdBy,
         title: activity.title, description: activity.description ?? "", category: activity.category,
         date: activity.date ?? "", time: activity.time ?? "", startTime, endTime,
         durationMinutes: activity.durationMinutes ?? null, timeZone: TIME_ZONE,
         status: activity.status, location: activity.location ?? "",
-        participants: group.members.map((member) => ({
+        participants: group.members.filter(member => !activity.participantIds || activity.participantIds.includes(member.id)).map((member) => ({
           id: member.id, name: member.name, initials: member.initials ?? "",
-          activityRsvpStatus: activityResponses[member.id] || null,
+          activityRsvpStatus: member.id === activity.createdBy ? "accepted" : activityResponses[member.id] || null,
           // Existing RSVP arrays are group-level, not activity attendance.
           groupRsvpStatus: group.goingIds?.includes(member.id) ? "GOING" :
             group.maybeIds?.includes(member.id) ? "MAYBE" : "NO_RESPONSE",
@@ -80,6 +81,7 @@ class ActivityService {
 
   getActivityRecommendations(uid, input) {
     return this.withActivity(uid, input, true, ({activity, group, putRecommendation}) => {
+      requireThat(!activity.cancelled, "failed-precondition", "This activity is cancelled.");
       const now = this.clock();
       const context = normalizeContext({
         ...input, durationMinutes: input.durationMinutes ?? activity.durationMinutes,
@@ -138,6 +140,7 @@ class ActivityService {
     const modifiedStart = outcome === "MODIFIED" ? parseInstant(input.startTime, "startTime") : null;
     const modifiedEnd = outcome === "MODIFIED" ? parseInstant(input.endTime, "endTime") : null;
     return this.withActivity(uid, input, true, async (context) => {
+      requireThat(!context.activity.cancelled, "failed-precondition", "This activity is cancelled.");
       const [record] = await context.getRecommendations([input.recommendationId]);
       requireThat(record?.activityId === input.activityId && record.organizerId === uid,
           "not-found", "Recommendation not found for this activity.");
