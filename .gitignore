@@ -1,4 +1,7 @@
 node_modules/
+.scannerwork/
+.env.sonar
+build-projects-check.json
 *.log
 .firebase/
 functions/.env.local

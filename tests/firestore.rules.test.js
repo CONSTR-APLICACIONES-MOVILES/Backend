@@ -56,6 +56,18 @@ test("members read their group; others and signed-out users cannot", async () =>
   await assertFails(getDoc(doc(anonymous(), "groups/roomies")));
 });
 
+test("private profiles, calendar snapshots and inbox states require the callable boundary", async () => {
+  for (const path of ["profiles/alex", "availability/alex/days/2026-10-19", "inboxes/alex/items/a1"]) {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), path), {private: "value"});
+    });
+    for (const db of [as("alex"), as("mateo"), anonymous()]) {
+      await assertFails(getDoc(doc(db, path)));
+      await assertFails(setDoc(doc(db, path), {forged: true}));
+    }
+  }
+});
+
 test("a member can RSVP for themselves, as the Android app does", async () => {
   const ref = doc(as("alex"), "groups/intramurals");
   await assertSucceeds(updateDoc(ref, {goingIds: arrayUnion("alex"), maybeIds: arrayRemove("alex")}));

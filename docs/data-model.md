@@ -2,6 +2,10 @@
 
 This is the contract between the backend and both clients, the Android app ([Sprint-2-Java](https://github.com/CONSTR-APLICACIONES-MOVILES/Sprint-2-Java)) and the Flutter app. Both apps must read and write exactly these fields. `firestore.rules` rejects anything else.
 
+Additive dated availability, private profiles and per-activity inbox responses
+are documented in [the mobile API contract](mobile-api.md). Legacy group arrays
+and existing activity commands retain their original behavior.
+
 Times of day are **minutes since midnight** (`1110` = 6:30 PM). Calendars are stored only as free/busy blocks, never event titles, places or attendees (data minimisation, Sprint 1 scenario 9.5).
 
 ## `groups/{groupId}`

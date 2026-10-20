@@ -7,7 +7,7 @@ const functionsV1 = require("firebase-functions/v1");
 const logger = require("firebase-functions/logger");
 const {BigQuery} = require("@google-cloud/bigquery");
 
-const {demoGroups, memberForAccount} = require("./src/demoData");
+const {joinDemoGroups} = require("./src/groupMembership");
 const {loadQuery, buildRecommendationInsight, buildResponseTimeInsight} = require("./src/insights");
 const {ActivityRepository} = require("./src/activityRepository");
 const {ActivityService} = require("./src/activityService");
@@ -20,6 +20,9 @@ const analyticsDataset = defineString("ANALYTICS_DATASET");
 const activityRepository = new ActivityRepository(getFirestore());
 const activityService = new ActivityService(activityRepository);
 Object.assign(exports, createActivityCallables(activityService));
+const {MobileService} = require("./src/mobileService");
+const {createMobileCallables} = require("./src/mobileCallables");
+Object.assign(exports, createMobileCallables(new MobileService(getFirestore())));
 
 /* BQ3 feedback loop: use server records, including displayed but unselected slots.
  * The shared service/repository instance is the analytics facade for both clients.
@@ -76,14 +79,6 @@ exports.resetRsvpOnNewActivity = onDocumentCreated(
  */
 exports.joinDemoGroupsOnSignUp = functionsV1.auth.user().onCreate(async (user) => {
   const db = getFirestore();
-  const newMember = memberForAccount(user.uid, user.email, user.displayName);
-  const batch = db.batch();
-  for (const groupId of Object.keys(demoGroups())) {
-    batch.update(db.collection("groups").doc(groupId), {
-      members: FieldValue.arrayUnion(newMember),
-      memberIds: FieldValue.arrayUnion(user.uid),
-    });
-  }
-  await batch.commit();
+  await joinDemoGroups(db, user);
   logger.info("New account joined the demo groups", {uid: user.uid});
 });

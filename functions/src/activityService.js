@@ -47,11 +47,11 @@ class ActivityService {
     return this.repository.withActivity(input.activityId, async (context) => {
       authorize(context, uid, organizer);
       return work(context);
-    });
+    }, {date: localDate(this.clock())});
   }
 
   getActivity(uid, input) {
-    return this.withActivity(uid, input, false, ({activity, group}) => {
+    return this.withActivity(uid, input, false, ({activity, group, activityResponses = {}}) => {
       const startTime = iso(activity.startTime);
       const endTime = iso(activity.endTime);
       const today = localDate(this.clock());
@@ -67,6 +67,7 @@ class ActivityService {
         status: activity.status, location: activity.location ?? "",
         participants: group.members.map((member) => ({
           id: member.id, name: member.name, initials: member.initials ?? "",
+          activityRsvpStatus: activityResponses[member.id] || null,
           // Existing RSVP arrays are group-level, not activity attendance.
           groupRsvpStatus: group.goingIds?.includes(member.id) ? "GOING" :
             group.maybeIds?.includes(member.id) ? "MAYBE" : "NO_RESPONSE",
