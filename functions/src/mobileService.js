@@ -297,14 +297,25 @@ class MobileService {
   async respondToActivityInvitation(uid, input) {
     requireThat(["accepted", "maybe", "declined"].includes(input.response), "invalid-argument", "Invalid invitation response.");
     await this.db.runTransaction(async (tx) => {
-      await this.requireInvitation(tx, uid, input.id, true);
+      const {activity} = await this.requireInvitation(tx, uid, input.id, true);
       const ref = this.db.doc(`inboxes/${uid}/items/${input.id}`);
       const existing = (await tx.get(ref)).data();
       requireThat(!existing?.response || existing.response === input.response,
           "failed-precondition", "This invitation already has a response.");
       // Per-activity response, independent of legacy group-level RSVP arrays.
-      if (!existing?.response) tx.set(ref, {isRead: true, response: input.response,
-        respondedAt: this.clock()}, {merge: true});
+      if (!existing?.response) {
+        const respondedAt = this.clock();
+        const invitedAt = existing?.invitedAt?.toDate ? existing.invitedAt.toDate() :
+          existing?.invitedAt ? new Date(existing.invitedAt) :
+          activity.createdAt?.toDate ? activity.createdAt.toDate() : new Date(respondedAt);
+        tx.set(ref, {isRead: true, response: input.response, respondedAt,
+          responseMs: Math.max(0, respondedAt.getTime() - invitedAt.getTime()),
+          availabilityAtInvitation: existing?.availabilityAtInvitation || 'UNKNOWN'}, {merge: true});
+        tx.set(this.db.doc(`activities/${input.id}/lifecycle/response-${uid}`), {
+          type: 'RESPONSE_RECEIVED', activityId: input.id, actorId: uid,
+          response: input.response, createdAt: respondedAt,
+        }, {merge: true});
+      }
     });
     return {id: input.id, response: input.response};
   }

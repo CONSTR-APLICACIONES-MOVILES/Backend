@@ -31,9 +31,10 @@ tests/                     Security rules tests (Firestore emulator)
 | `getActivityRecommendationAnalytics` | Organizer callable | Per-activity BQ3 counts and percentage |
 | `refreshResponseTimeInsight` | Every day, 4:15 AM Bogotá | Runs `sql/bq5_response_time.sql` and writes the expected time until everyone answers an invitation, per group size, to `insights/bq5_response_time`. The Active Groups card shows it. This is the BQ5 Type 2 feedback loop |
 | `resetRsvpOnNewActivity` | New `activities` document | Empties `goingIds` and `maybeIds` of the activity's group, so every invitation starts with no answers (BQ5) |
+| `dispatchPendingReminders` | Every five minutes | Converts due in-app reminders into alert events, records `sentAt`, and increments the participant reminder count for BQ6/BQ14 |
 | `joinDemoGroupsOnSignUp` | New Firebase Auth account | Adds the account to the demo groups so a new user can RSVP and create activities immediately. Remove it once the apps can create and join groups |
 
-BQ1 and BQ8 aren't run by a function: set them up as BigQuery **scheduled queries** feeding the Looker Studio dashboard (see Setup, step 5).
+BQ1, BQ2 and BQ4/BQ6-BQ14 are implemented as BigQuery **scheduled queries** over the Analytics export, feeding the Looker Studio dashboard. BQ3 remains backed by authoritative Firestore recommendation records.
 
 The shared [Activity API contract](docs/activity-api.md) includes Java/Flutter
 examples, scoring, retry behavior, and BQ3 semantics. The initial engine uses

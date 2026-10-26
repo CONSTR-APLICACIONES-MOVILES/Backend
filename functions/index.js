@@ -75,6 +75,50 @@ exports.resetRsvpOnNewActivity = onDocumentCreated(
       logger.info("RSVPs reset for a new activity", {groupId, activityId: event.params.activityId});
     });
 
+/* In-app reminder delivery. This deliberately records delivery state even when push delivery is
+ * unavailable; the mobile inbox can render the alert on its next refresh. */
+exports.dispatchPendingReminders = onSchedule(
+    {schedule: "every 5 minutes", timeZone: "America/Bogota", region: "us-central1"},
+    async () => {
+      const db = getFirestore();
+      const now = new Date();
+      const pending = await db.collectionGroup("reminders")
+          .where("status", "==", "SCHEDULED")
+          .where("scheduledAt", "<=", now).limit(500).get();
+      const batch = db.batch();
+      let dispatched = 0;
+      for (const reminder of pending.docs) {
+        const parts = reminder.ref.path.split("/");
+        const uid = parts[1];
+        const activityId = parts[3];
+        const inboxRef = db.doc(`inboxes/${uid}/items/${activityId}`);
+        const inbox = (await inboxRef.get()).data();
+        if (!inbox || inbox.response) {
+          batch.update(reminder.ref, {status: "CANCELLED", cancelledAt: now});
+          continue;
+        }
+        const activity = (await db.doc(`activities/${activityId}`).get()).data();
+        if (!activity || activity.cancelled) {
+          batch.update(reminder.ref, {status: "CANCELLED", cancelledAt: now});
+          continue;
+        }
+        const data = reminder.data();
+        const eventId = `reminder-${activityId}-${data.sequence || 1}`;
+        batch.set(db.doc(`alertEvents/${uid}/items/${eventId}`), {
+          activityId, groupId: activity.groupId, kind: "reminder",
+          title: `Pending response: ${activity.title}`,
+          description: [activity.date, activity.time, activity.location].filter(Boolean).join(" · "),
+          createdAt: now, strategy: data.strategy, sequence: data.sequence || 1,
+        }, {merge: true});
+        batch.update(reminder.ref, {status: "SENT", sentAt: now});
+        batch.set(inboxRef, {reminderCount: FieldValue.increment(1), lastReminderAt: now,
+          lastReminderStrategy: data.strategy}, {merge: true});
+        dispatched++;
+      }
+      if (!pending.empty) await batch.commit();
+      logger.info("Pending reminders dispatched", {checked: pending.size, dispatched});
+    });
+
 /* Adds every new account to the demo groups, so a real user can RSVP, compare availability and create activities right after signing up. Remove when the apps can create and join groups.
  */
 exports.joinDemoGroupsOnSignUp = functionsV1.auth.user().onCreate(async (user) => {

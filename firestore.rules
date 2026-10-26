@@ -28,6 +28,22 @@ service cloud.firestore {
           || (data.description is string && data.description.size() <= 5000);
     }
 
+    function validPlanningContext(data) {
+      return !('planningContext' in data)
+          || (data.planningContext is map
+              && (!('groupSizeAtCreation' in data.planningContext)
+                  || data.planningContext.groupSizeAtCreation is int)
+              && (!('comparisonUsed' in data.planningContext)
+                  || data.planningContext.comparisonUsed is bool)
+              && (!('comparisonId' in data.planningContext)
+                  || data.planningContext.comparisonId is string
+                  || data.planningContext.comparisonId == null)
+              && (!('locationAreaId' in data.planningContext)
+                  || data.planningContext.locationAreaId is string)
+              && (!('timeBucket' in data.planningContext)
+                  || data.planningContext.timeBucket is string));
+    }
+
     match /groups/{groupId} {
       allow read: if isMember(resource.data);
 
@@ -55,9 +71,10 @@ service cloud.firestore {
           && request.resource.data.title is string
           && request.resource.data.title.size() > 0
           && request.resource.data.title.size() <= 120
-          && validDescription(request.resource.data)
-          && request.resource.data.keys().hasOnly(
-               ['groupId', 'title', 'description', 'category', 'date', 'time', 'location', 'status', 'createdBy', 'createdAt']);
+           && validDescription(request.resource.data)
+           && validPlanningContext(request.resource.data)
+           && request.resource.data.keys().hasOnly(
+                ['groupId', 'title', 'description', 'category', 'date', 'time', 'location', 'status', 'createdBy', 'createdAt', 'planningContext']);
 
       // Only the organiser may confirm or edit their activity; groupId and createdBy never change.
       allow update: if signedIn()
@@ -76,6 +93,23 @@ service cloud.firestore {
 
     // Only the authenticated callable functions may record impressions and decisions.
     match /slotRecommendations/{recommendationId} {
+      allow read, write: if false;
+    }
+
+    // These records are backend-owned projections. Mobile clients use callable APIs.
+    match /activities/{activityId}/lifecycle/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /inboxes/{userId}/items/{activityId} {
+      allow read, write: if false;
+    }
+
+    match /inboxes/{userId}/items/{activityId}/reminders/{reminderId} {
+      allow read, write: if false;
+    }
+
+    match /analyticsEvents/{eventId} {
       allow read, write: if false;
     }
 

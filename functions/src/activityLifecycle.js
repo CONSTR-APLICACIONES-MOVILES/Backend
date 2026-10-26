@@ -41,6 +41,14 @@ function metadata(input) {
     ['PROPOSED', 'CONFIRMED'].includes(result.status), 'invalid-argument', 'Choose valid activity details.');
   return result;
 }
+
+function timeBucket(minutes) {
+  const hour = Math.floor(minutes / 60);
+  if (hour < 12) return 'morning';
+  if (hour < 18) return 'afternoon';
+  if (hour < 22) return 'evening';
+  return 'night';
+}
 function participants(input, group, uid) {
   const ids = input ?? group.memberIds;
   requireThat(Array.isArray(ids) && ids.length > 0 && ids.length <= 100 &&
@@ -49,18 +57,32 @@ function participants(input, group, uid) {
   ids.forEach(id => documentId(id, 'participantId'));
   return [...ids].sort();
 }
-async function available(db, tx, group, ids, slot, now, viewer) {
+async function availabilitySnapshot(db, tx, group, ids, slot, now, viewer) {
   for (const id of ids) requireThat(await canShare(db, id, viewer, "scheduleVisibility", tx), "permission-denied", "A participant does not share availability with you.");
   const docs = await tx.getAll(...ids.map(id => db.doc(`availability/${id}/days/${slot.date}`)));
+  const result = {};
   const start = (slot.start.getTime() - dayStart(slot.date)) / MINUTE;
   const end = (slot.end.getTime() - dayStart(slot.date)) / MINUTE;
   ids.forEach((id, index) => {
     const member = group.members?.find(member => member.id === id);
     const saved = docs[index].data();
     const busy = saved ? saved.busy : slot.date === localDate(now) && !member?.calendarSync ? member?.busy : undefined;
+    result[id] = busy === undefined ? 'UNKNOWN' : busy.some(block => start < block.end && end > block.start) ? 'BUSY' : 'AVAILABLE';
     requireThat(hasSchedule({busy}) && !busy.some(block => start < block.end && end > block.start),
       'failed-precondition', 'Availability is unknown or the selected slot is no longer free. Compare again.');
   });
+  return result;
+}
+
+async function available(db, tx, group, ids, slot, now, viewer) {
+  return availabilitySnapshot(db, tx, group, ids, slot, now, viewer);
+}
+
+function lifecycleEvent(tx, db, activityId, type, now, metadata = {}) {
+  const eventId = `${type.toLowerCase()}-${now.getTime()}`;
+  tx.set(db.doc(`activities/${activityId}/lifecycle/${eventId}`), {
+    type, createdAt: now, ...metadata,
+  }, {merge: true});
 }
 
 class ActivityLifecycle {
@@ -97,6 +119,10 @@ class ActivityLifecycle {
 
   async publishActivity(uid, input) {
     documentId(input.requestId, 'requestId'); documentId(input.groupId, 'groupId');
+    requireThat(input.locationAreaId === undefined ||
+      ['central_library', 'mario_laserna', 'campus_north', 'campus_south', 'outside_campus', 'unknown'].includes(input.locationAreaId),
+    'invalid-argument', 'Use a supported location area.');
+    if (input.minimumNoticeMinutes !== undefined) integer(input.minimumNoticeMinutes, 0, 1440, 'minimumNoticeMinutes');
     const fields = metadata(input);
     const fingerprint = hash(input);
     const commandRef = this.db.doc(`activityCommands/${uid}/requests/${input.requestId}`);
@@ -115,6 +141,7 @@ class ActivityLifecycle {
       const scheduled = input.startTime != null || input.endTime != null;
       let slot;
       if (scheduled) slot = interval(input, now);
+      let availability = {};
       if (input.comparisonId != null) {
         documentId(input.comparisonId, 'comparisonId');
         const evidence = (await tx.get(this.db.doc(`planningComparisons/${input.comparisonId}`))).data();
@@ -123,19 +150,46 @@ class ActivityLifecycle {
           JSON.stringify(evidence.participantIds) === JSON.stringify(ids) &&
           (!evidence.groupId || evidence.groupId === input.groupId),
         'failed-precondition', 'Comparison expired or changed. Compare again before publishing.');
-        await available(this.db, tx, group, ids, slot, now, uid);
+         availability = await availabilitySnapshot(this.db, tx, group, ids, slot, now, uid);
       }
       const receipt = {activityId, created: true, scheduled,
         confirmed: fields.status === 'CONFIRMED', invitationCount: ids.filter(id => id !== uid).length,
         startTime: slot?.start.toISOString() ?? null, endTime: slot?.end.toISOString() ?? null,
         timeZone: TIME_ZONE};
       const displayStart = slot ? (slot.start.getTime() - dayStart(slot.date)) / MINUTE : null;
+      const planningContext = {
+        groupSizeAtCreation: ids.length,
+        minimumNoticeMinutes: input.minimumNoticeMinutes ?? null,
+        comparisonUsed: input.comparisonId != null,
+        comparisonId: input.comparisonId || null,
+        locationAreaId: input.locationAreaId || 'unknown',
+        timeBucket: displayStart == null ? 'unknown' : timeBucket(displayStart),
+      };
       tx.create(this.db.doc(`activities/${activityId}`), {...fields, groupId: input.groupId,
-        createdBy: uid, createdAt: now, participantIds: ids, cancelled: false,
-        ...(slot ? {startTime: slot.start, endTime: slot.end, durationMinutes: slot.minutes,
-          timeZone: TIME_ZONE, date: slot.date,
-          time: `${String(Math.floor(displayStart / 60)).padStart(2, '0')}:${String(displayStart % 60).padStart(2, '0')}`} : {}),
-        ...(input.comparisonId ? {planningComparisonId: input.comparisonId} : {})});
+         createdBy: uid, createdAt: now, participantIds: ids, cancelled: false,
+         planningContext,
+         ...(slot ? {startTime: slot.start, endTime: slot.end, durationMinutes: slot.minutes,
+           timeZone: TIME_ZONE, date: slot.date,
+           time: `${String(Math.floor(displayStart / 60)).padStart(2, '0')}:${String(displayStart % 60).padStart(2, '0')}`} : {}),
+         ...(fields.status === 'CONFIRMED' ? {confirmedAt: now} : {}),
+         ...(input.comparisonId ? {planningComparisonId: input.comparisonId} : {})});
+      lifecycleEvent(tx, this.db, activityId, 'CREATED', now, {groupId: input.groupId, actorId: uid});
+      if (fields.status === 'CONFIRMED') lifecycleEvent(tx, this.db, activityId, 'CONFIRMED', now, {groupId: input.groupId, actorId: uid});
+      for (const participantId of ids.filter(id => id !== uid)) {
+        tx.set(this.db.doc(`inboxes/${participantId}/items/${activityId}`), {
+          activityId, groupId: input.groupId, invitedAt: now, response: null,
+          availabilityAtInvitation: slot ? (availability[participantId] || 'UNKNOWN') : 'UNKNOWN',
+          reminderCount: 0, lastReminderAt: null, lastReminderStrategy: null,
+          isRead: false,
+        }, {merge: true});
+        if (slot) {
+          tx.set(this.db.doc(`inboxes/${participantId}/items/${activityId}/reminders/initial`), {
+            activityId, strategy: 'single_after_60_min', sequence: 1,
+            scheduledAt: new Date(now.getTime() + 60 * MINUTE), sentAt: null,
+            deliveredAt: null, openedAt: null, respondedAt: null, status: 'SCHEDULED',
+          }, {merge: true});
+        }
+      }
       tx.create(commandRef, {fingerprint, receipt, createdAt: now});
       return receipt;
     });
@@ -163,8 +217,12 @@ class ActivityLifecycle {
         requireThat(fields.date === (activity.date || '') && fields.time === (activity.time || ''),
           'failed-precondition', 'Use recommendations to change a scheduled interval.');
       }
-      tx.update(ref, cancel ? {cancelled: true, cancelledAt: this.clock(), lastMutation: fingerprint}
-        : {...fields, lastMutation: fingerprint, updatedAt: this.clock()});
+      const now = this.clock();
+      const becameConfirmed = !cancel && fields.status === 'CONFIRMED' && activity.status !== 'CONFIRMED';
+      tx.update(ref, cancel ? {cancelled: true, cancelledAt: now, lastMutation: fingerprint}
+        : {...fields, ...(becameConfirmed ? {confirmedAt: now} : {}), lastMutation: fingerprint, updatedAt: now});
+      lifecycleEvent(tx, this.db, input.activityId, cancel ? 'CANCELLED' : becameConfirmed ? 'CONFIRMED' : 'UPDATED', now,
+        {groupId: activity.groupId, actorId: uid});
       return {activityId: input.activityId, cancelled: cancel, saved: true};
     });
   }

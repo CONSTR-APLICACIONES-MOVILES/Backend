@@ -10,7 +10,7 @@ const FIELDS = {
   revokeGroupInvitation: ["groupId", "inviteeId"], getGroupDetails: ["groupId"],
   updatePresence: ["status", "visibility", "expiresAt", "clientUserId"], updatePreferences: ["preferences", "clientUserId"],
   validatePlanningSlot: ['participantIds', 'groupId', 'sourceSlotId', 'startTime', 'endTime', 'timeZone'],
-  publishActivity: ['requestId', 'groupId', 'fields', 'participantIds', 'startTime', 'endTime', 'timeZone', 'comparisonId'],
+  publishActivity: ['requestId', 'groupId', 'fields', 'participantIds', 'startTime', 'endTime', 'timeZone', 'comparisonId', 'minimumNoticeMinutes', 'locationAreaId'],
   updateActivityDetails: ['activityId', 'expectedVersion', 'fields'],
   cancelActivity: ['activityId', 'expectedVersion'],
   getScheduleFriends: ["groupId"], getScheduleDay: ["date", "friendIds"],

@@ -61,8 +61,17 @@ Created by clients with an auto-generated ID.
 | `createdAt` | timestamp | Must be `FieldValue.serverTimestamp()` |
 | `startTime`, `endTime` | timestamp, optional | Backend-managed canonical schedule; callable DTOs serialize these as UTC ISO strings |
 | `durationMinutes` | integer, optional | Backend-managed duration (15–720 minutes) |
+| `confirmedAt` | timestamp, optional | Backend-managed first transition to `CONFIRMED` |
+| `planningContext` | map, optional | Immutable, coarse planning dimensions used by analytics |
 
 Clients may create the original fields plus `description`. Only the author can edit, confirm or delete an activity, and `groupId`/`createdBy` never change. Canonical schedule fields can only be written through the recommendation decision callables. After those fields exist, direct client edits of `date`/`time` are rejected to prevent inconsistent schedules. Legacy activities remain readable without a migration. **Queries must filter by `groupId`**, otherwise the rules reject them:
+
+`planningContext` contains `groupSizeAtCreation`, `minimumNoticeMinutes`, `comparisonUsed`, `comparisonId`, `locationAreaId` and `timeBucket`. Location areas are coarse identifiers such as `central_library`, `mario_laserna`, `campus_north`, `campus_south`, `outside_campus` and `unknown`; exact coordinates are not stored for analytics.
+
+Every backend-created activity also receives an immutable lifecycle projection at
+`activities/{activityId}/lifecycle/{eventId}`. Mobile clients cannot read or write this
+projection directly. Event types are `CREATED`, `INVITATION_SENT`, `RESPONSE_RECEIVED`,
+`CONFIRMED`, `CANCELLED` and `UPDATED`.
 
 ```dart
 db.collection('activities').where('groupId', isEqualTo: groupId).orderBy('createdAt', descending: true);
@@ -130,6 +139,21 @@ Each entry in `by_group_size`: `group_size`, `invitations`, `completed`, `pct_co
 
 If the document is missing or can't be read, clients show no estimate.
 
+## Activity inbox and reminders
+
+`inboxes/{uid}/items/{activityId}` is the backend-owned per-participant response record.
+It contains `invitedAt`, `response`, `respondedAt`, `responseMs`,
+`availabilityAtInvitation` (`AVAILABLE`, `BUSY` or `UNKNOWN`), `reminderCount`,
+`lastReminderAt` and `lastReminderStrategy`. The availability value is a snapshot taken
+when the invitation is created; it never contains calendar titles or locations.
+
+Scheduled in-app reminders live at
+`inboxes/{uid}/items/{activityId}/reminders/{reminderId}`. They contain `strategy`,
+`sequence`, `scheduledAt`, `sentAt`, `deliveredAt`, `openedAt`, `respondedAt` and
+`status` (`SCHEDULED`, `SENT`, `OPENED`, `RESPONDED`, `EXPIRED` or `CANCELLED`).
+The `dispatchPendingReminders` function marks due reminders as sent and creates an
+in-app alert. A response cancels the reminder on the next dispatch pass.
+
 **RSVPs restart with each activity.** `resetRsvpOnNewActivity` empties `goingIds` and `maybeIds` of the group when an activity is created, because a new activity is a new invitation (BQ5).
 
 
@@ -149,6 +173,16 @@ recommendation IDs do not establish a BQ3 denominator.
 | `feature_used` | `feature` (`groups`, `compare_availability`, `schedule`, `invitations`, `alerts`), `screen` | BQ8 |
 | `activity_created` | `category`, `source` | |
 | `rsvp_submitted` | `activity_id` (string), `group_size` (int), `response_ms` (int), `response` (`going`/`maybe`) | BQ5 |
+| `activity_create_attempt` | `creation_session_id`, `source`, `group_size` | BQ2 |
+| `activity_create_result` | `creation_session_id`, `result`, `duration_ms`, optional `error_code`, `activity_id` | BQ2 |
+| `invitation_sent` | `activity_id`, `availability_at_invitation` | BQ4 |
+| `reminder_sent` | `activity_id`, `strategy`, `sequence`, `delay_minutes` | BQ6/BQ14 |
+| `response_after_reminder` | `activity_id`, `strategy`, `sequence`, `response_delay_ms` | BQ6/BQ14 |
+| `creation_step_viewed` | `creation_session_id`, `step` | BQ7 |
+| `creation_step_completed` | `creation_session_id`, `step` | BQ7 |
+| `creation_abandoned` | `creation_session_id`, `last_step`, `duration_ms` | BQ7 |
+| `comparison_started` | `comparison_id`, `group_size` | BQ9 |
+| `activity_confirmed` | `activity_id`, `category`, `group_size`, `time_bucket`, `location_area_id` | BQ9-BQ12 |
 
 Every event also carries `client_ts` (ms). User IDs are sent as a SHA-256 hash (first 16 bytes, hex), never the raw UID.
 
