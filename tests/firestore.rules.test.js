@@ -130,6 +130,16 @@ test("insights are read-only for signed-in users", async () => {
   await assertFails(setDoc(doc(as("alex"), "insights/bq3_slot_acceptance"), {recommended_position: 3}));
 });
 
+test("campus areas are reference data: signed-in users read, nobody writes", async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), "campusAreas/central_library"),
+        {name: "Central Library", lat: 4.6021, lng: -74.0654, order: 1, aliases: ["library"]});
+  });
+  await assertSucceeds(getDoc(doc(as("stranger"), "campusAreas/central_library")));
+  await assertFails(getDoc(doc(anonymous(), "campusAreas/central_library")));
+  await assertFails(setDoc(doc(as("alex"), "campusAreas/central_library"), {name: "Fake"}));
+});
+
 test("seeded groups match the fields the apps read", async () => {
   const snapshot = await getDoc(doc(as("alex"), "groups/roomies"));
   const data = snapshot.data();

@@ -1,4 +1,5 @@
 const {createHash, randomUUID} = require('node:crypto');
+const {CAMPUS_AREAS} = require("./campusAreas");
 const {requireThat, documentId, integer} = require('./errors');
 const {localDate, dayStart, MINUTE, hasSchedule, TIME_ZONE} = require('./availability');
 
@@ -120,7 +121,7 @@ class ActivityLifecycle {
   async publishActivity(uid, input) {
     documentId(input.requestId, 'requestId'); documentId(input.groupId, 'groupId');
     requireThat(input.locationAreaId === undefined ||
-      ['central_library', 'mario_laserna', 'campus_north', 'campus_south', 'outside_campus', 'unknown'].includes(input.locationAreaId),
+      [...CAMPUS_AREAS.map((area) => area.id), 'unknown'].includes(input.locationAreaId),
     'invalid-argument', 'Use a supported location area.');
     if (input.minimumNoticeMinutes !== undefined) integer(input.minimumNoticeMinutes, 0, 1440, 'minimumNoticeMinutes');
     const fields = metadata(input);

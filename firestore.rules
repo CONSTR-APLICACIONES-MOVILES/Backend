@@ -113,6 +113,12 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Reference data written by the seed script: where activities can happen, with coordinates.
+    match /campusAreas/{areaId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
     // Written by the scheduled BQ3 function; read by both apps (feature F2, "Recommended" slot).
     match /insights/{insightId} {
       allow read: if signedIn();

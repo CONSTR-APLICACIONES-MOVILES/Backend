@@ -46,3 +46,13 @@ test("demo availability: weekdays shift the schedule, weekends are free", () => 
   assert.ok(docs.some((d) => d.uid === "mateo" && d.date === "2026-10-27"));
   assert.ok(docs.every((d) => d.busy.every((b) => b.start < b.end && b.end <= 1440)));
 });
+
+test("campus areas use the locationAreaId values publishActivity accepts", () => {
+  const {CAMPUS_AREAS} = require("../src/campusAreas");
+  const accepted = ["central_library", "mario_laserna", "campus_north", "campus_south", "outside_campus", "unknown"];
+  for (const area of CAMPUS_AREAS) {
+    assert.ok(accepted.includes(area.id), area.id);
+    assert.ok(area.name && Array.isArray(area.aliases));
+    if (area.id !== "outside_campus") assert.ok(Number.isFinite(area.lat) && Number.isFinite(area.lng));
+  }
+});

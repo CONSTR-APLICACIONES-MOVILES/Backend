@@ -12,6 +12,7 @@ const {initializeApp} = require("firebase-admin/app");
 const {getFirestore, FieldValue} = require("firebase-admin/firestore");
 const {demoGroups, demoAvailability} = require("../src/demoData");
 const {localDate} = require("../src/availability");
+const {CAMPUS_AREAS} = require("../src/campusAreas");
 
 /* Days of demo availability written for the Schedule screen (today onward). */
 const AVAILABILITY_DAYS = 14;
@@ -39,6 +40,14 @@ async function main() {
     await ref.set(data);
     console.log(`wrote  groups/${groupId} (${data.members.length} members)`);
   }
+
+  // Campus areas are reference data: always rewritten so name or coordinate fixes reach the apps.
+  const areas = db.batch();
+  for (const {id, ...area} of CAMPUS_AREAS) {
+    areas.set(db.doc(`campusAreas/${id}`), area);
+  }
+  await areas.commit();
+  console.log(`wrote  ${CAMPUS_AREAS.length} campus areas`);
 
   // Demo members have no Google Calendar, so give them dated snapshots like an import would.
   const docs = demoAvailability(localDate(new Date()), AVAILABILITY_DAYS);
