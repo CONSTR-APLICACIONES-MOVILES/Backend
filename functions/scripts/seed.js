@@ -9,8 +9,12 @@
    Against a real project: run `gcloud auth application-default login` once.
  */
 const {initializeApp} = require("firebase-admin/app");
-const {getFirestore} = require("firebase-admin/firestore");
-const {demoGroups} = require("../src/demoData");
+const {getFirestore, FieldValue} = require("firebase-admin/firestore");
+const {demoGroups, demoAvailability} = require("../src/demoData");
+const {localDate} = require("../src/availability");
+
+/* Days of demo availability written for the Schedule screen (today onward). */
+const AVAILABILITY_DAYS = 14;
 
 function argValue(name) {
   const index = process.argv.indexOf(name);
@@ -35,6 +39,18 @@ async function main() {
     await ref.set(data);
     console.log(`wrote  groups/${groupId} (${data.members.length} members)`);
   }
+
+  // Demo members have no Google Calendar, so give them dated snapshots like an import would.
+  const docs = demoAvailability(localDate(new Date()), AVAILABILITY_DAYS);
+  for (let i = 0; i < docs.length; i += 400) {
+    const batch = db.batch();
+    for (const doc of docs.slice(i, i + 400)) {
+      batch.set(db.doc(`availability/${doc.uid}/days/${doc.date}`),
+          {date: doc.date, busy: doc.busy, source: "demo", updatedAt: FieldValue.serverTimestamp()});
+    }
+    await batch.commit();
+  }
+  console.log(`wrote  ${docs.length} demo availability days`);
 }
 
 main().catch((error) => {
