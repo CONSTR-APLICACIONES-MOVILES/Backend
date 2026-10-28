@@ -148,6 +148,29 @@ test("per-activity responses persist, are idempotent and appear in activity deta
   assert.deepEqual((await db.doc("groups/g1").get()).data().goingIds, []);
   await assert.rejects(call("respondToActivityInvitation", {id: "a1", response: "declined"}), {code: "failed-precondition"});
 });
+test("organizer reminder choice is stored and scheduled relative to the activity", async () => {
+  const startTime = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+  await db.doc("activities/a1").update({startTime, endTime: new Date(startTime.getTime() + 60 * 60 * 1000)});
+  const receipt = await call("setActivityReminder", {activityId: "a1", minutesBefore: 30}, "organizer");
+  assert.equal(receipt.enabled, true);
+  assert.equal(receipt.minutesBefore, 30);
+  assert.equal(Date.parse(receipt.scheduledAt), startTime.getTime() - 30 * 60 * 1000);
+  const reminder = (await db.doc("inboxes/organizer/items/a1/reminders/activity-reminder").get()).data();
+  assert.equal(reminder.purpose, "activity");
+  assert.equal(reminder.status, "SCHEDULED");
+  assert.equal((await db.doc("activities/a1").get()).data().reminderMinutesBefore, 30);
+  assert.deepEqual(await call("setActivityReminder", {activityId: "a1", minutesBefore: 0}, "organizer"),
+    {activityId: "a1", minutesBefore: 0, enabled: false});
+  assert.equal((await db.doc("inboxes/organizer/items/a1/reminders/activity-reminder").get()).data().status, "CANCELLED");
+});
+test("reminder configuration enforces participant, valid option and future scheduled activity", async () => {
+  await assert.rejects(call("setActivityReminder", {activityId: "a1", minutesBefore: 15}, "outsider"),
+    {code: "permission-denied"});
+  await assert.rejects(call("setActivityReminder", {activityId: "a1", minutesBefore: 20}, "organizer"),
+    {code: "invalid-argument"});
+  await assert.rejects(call("setActivityReminder", {activityId: "a1", minutesBefore: 15}, "organizer"),
+    {code: "failed-precondition"});
+});
 test("outsiders, authors and forged responses cannot mutate another invitation", async () => {
   for (const uid of ["outsider", "organizer"]) await assert.rejects(
       call("respondToActivityInvitation", {id: "a1", response: "accepted"}, uid), {code: "permission-denied"});

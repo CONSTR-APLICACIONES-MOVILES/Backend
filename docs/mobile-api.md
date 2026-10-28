@@ -16,6 +16,7 @@ or Firestore client permissions changed.
 | getActivities | `{}` | Membership-scoped JSON activity summaries for Home/offline reads |
 | markAlertsRead | `{ids}` | Persist read state for up to 200 visible authorized activity IDs |
 | respondToActivityInvitation | `{id, response}` | accepted/maybe/declined; transactional, identical retries are idempotent |
+| setActivityReminder | `{activityId, minutesBefore}` | Organizer sets or disables a reminder (0, 15, 30 or 60 minutes before); requires a scheduled future activity |
 
 ## Availability and Java compatibility
 

@@ -93,20 +93,22 @@ exports.dispatchPendingReminders = onSchedule(
         const activityId = parts[3];
         const inboxRef = db.doc(`inboxes/${uid}/items/${activityId}`);
         const inbox = (await inboxRef.get()).data();
-        if (!inbox || inbox.response) {
-          batch.update(reminder.ref, {status: "CANCELLED", cancelledAt: now});
-          continue;
-        }
         const activity = (await db.doc(`activities/${activityId}`).get()).data();
         if (!activity || activity.cancelled) {
           batch.update(reminder.ref, {status: "CANCELLED", cancelledAt: now});
           continue;
         }
         const data = reminder.data();
+        const isOrganizerReminder = data.purpose === "activity" && activity.createdBy === uid;
+        if ((!inbox && !isOrganizerReminder) ||
+            (inbox?.response && (inbox.response === "declined" || !isOrganizerReminder))) {
+          batch.update(reminder.ref, {status: "CANCELLED", cancelledAt: now});
+          continue;
+        }
         const eventId = `reminder-${activityId}-${data.sequence || 1}`;
         batch.set(db.doc(`alertEvents/${uid}/items/${eventId}`), {
           activityId, groupId: activity.groupId, kind: "reminder",
-          title: `Pending response: ${activity.title}`,
+          title: isOrganizerReminder ? `Upcoming activity: ${activity.title}` : `Pending response: ${activity.title}`,
           description: [activity.date, activity.time, activity.location].filter(Boolean).join(" · "),
           createdAt: now, strategy: data.strategy, sequence: data.sequence || 1,
         }, {merge: true});

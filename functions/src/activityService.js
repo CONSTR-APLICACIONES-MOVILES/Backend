@@ -66,6 +66,7 @@ class ActivityService {
         date: activity.date ?? "", time: activity.time ?? "", startTime, endTime,
         durationMinutes: activity.durationMinutes ?? null, timeZone: TIME_ZONE,
         status: activity.status, location: activity.location ?? "",
+        reminderMinutesBefore: activity.reminderMinutesBefore ?? null,
         participants: group.members.filter(member => !activity.participantIds || activity.participantIds.includes(member.id)).map((member) => ({
           id: member.id, name: member.name, initials: member.initials ?? "",
           activityRsvpStatus: member.id === activity.createdBy ? "accepted" : activityResponses[member.id] || null,

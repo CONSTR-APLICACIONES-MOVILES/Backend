@@ -63,6 +63,7 @@ Created by clients with an auto-generated ID.
 | `durationMinutes` | integer, optional | Backend-managed duration (15–720 minutes) |
 | `confirmedAt` | timestamp, optional | Backend-managed first transition to `CONFIRMED` |
 | `planningContext` | map, optional | Immutable, coarse planning dimensions used by analytics |
+| `reminderMinutesBefore` | integer, optional | Organizer preference, 0 (disabled), 15, 30 or 60; changed only through `setActivityReminder` |
 
 Clients may create the original fields plus `description`. Only the author can edit, confirm or delete an activity, and `groupId`/`createdBy` never change. Canonical schedule fields can only be written through the recommendation decision callables. After those fields exist, direct client edits of `date`/`time` are rejected to prevent inconsistent schedules. Legacy activities remain readable without a migration. **Queries must filter by `groupId`**, otherwise the rules reject them:
 

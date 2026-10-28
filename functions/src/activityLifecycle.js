@@ -185,7 +185,7 @@ class ActivityLifecycle {
         }, {merge: true});
         if (slot) {
           tx.set(this.db.doc(`inboxes/${participantId}/items/${activityId}/reminders/initial`), {
-            activityId, strategy: 'single_after_60_min', sequence: 1,
+            activityId, purpose: 'rsvp', strategy: 'single_after_60_min', sequence: 1,
             scheduledAt: new Date(now.getTime() + 60 * MINUTE), sentAt: null,
             deliveredAt: null, openedAt: null, respondedAt: null, status: 'SCHEDULED',
           }, {merge: true});

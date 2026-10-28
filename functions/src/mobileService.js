@@ -273,6 +273,67 @@ class MobileService {
     return {activity, groupRef};
   }
 
+  async setActivityReminder(uid, input) {
+    documentId(input.activityId, "activityId");
+    requireThat([0, 15, 30, 60].includes(input.minutesBefore), "invalid-argument",
+        "Reminder must be disabled or set to 15, 30 or 60 minutes before the activity.");
+    const activityRef = this.db.doc(`activities/${input.activityId}`);
+    return this.db.runTransaction(async tx => {
+      const activity = (await tx.get(activityRef)).data();
+      requireThat(activity, "not-found", "Activity not found.");
+      const groupRef = this.db.doc(`groups/${activity.groupId}`);
+      const group = (await tx.get(groupRef)).data();
+      requireThat(group?.memberIds?.includes(uid) && activity.createdBy === uid,
+          "permission-denied", "Only the activity organizer can configure its reminder.");
+      requireThat(!activity.cancelled, "failed-precondition", "This activity is cancelled.");
+
+      const inboxRef = this.db.doc(`inboxes/${uid}/items/${input.activityId}`);
+      const reminderRef = inboxRef.collection("reminders").doc("activity-reminder");
+      const reminder = (await tx.get(reminderRef)).data();
+      if (input.minutesBefore === 0) {
+        if (reminder?.purpose === "activity" && reminder.status === "SCHEDULED") {
+          tx.update(reminderRef, {status: "CANCELLED", cancelledAt: this.clock()});
+        }
+        if (activity.createdBy === uid) {
+          tx.update(activityRef, {reminderMinutesBefore: 0, updatedAt: this.clock()});
+        }
+        tx.set(inboxRef, {activityId: input.activityId, groupId: activity.groupId,
+          reminderMinutesBefore: 0}, {merge: true});
+        return {activityId: input.activityId, minutesBefore: 0, enabled: false};
+      }
+
+      const startTime = activity.startTime?.toDate ? activity.startTime.toDate() :
+        activity.startTime ? new Date(activity.startTime) : null;
+      const now = this.clock();
+      requireThat(startTime && Number.isFinite(startTime.getTime()) && startTime > now,
+          "failed-precondition", "A future scheduled activity is required for reminders.");
+      const scheduledAt = new Date(Math.max(now.getTime(),
+          startTime.getTime() - input.minutesBefore * 60 * 1000));
+      tx.set(reminderRef, {
+        activityId: input.activityId,
+        groupId: activity.groupId,
+        purpose: "activity",
+        strategy: `activity_${input.minutesBefore}m_before`,
+        sequence: 1,
+        minutesBefore: input.minutesBefore,
+        scheduledAt,
+        sentAt: null,
+        deliveredAt: null,
+        openedAt: null,
+        respondedAt: null,
+        status: "SCHEDULED",
+        updatedAt: now,
+      });
+      if (activity.createdBy === uid) {
+        tx.update(activityRef, {reminderMinutesBefore: input.minutesBefore, updatedAt: now});
+      }
+      tx.set(inboxRef, {activityId: input.activityId, groupId: activity.groupId,
+        reminderMinutesBefore: input.minutesBefore}, {merge: true});
+      return {activityId: input.activityId, minutesBefore: input.minutesBefore,
+        scheduledAt: scheduledAt.toISOString(), enabled: true};
+    });
+  }
+
   async markNotificationEventsRead(uid, input) {
     requireThat(Array.isArray(input.ids) && input.ids.every(id => /^(evt|grp|rem)_[a-f0-9]{64}$/.test(id)), 'invalid-argument', 'Supply event notification IDs.');
     return this.markAlertsRead(uid,input);

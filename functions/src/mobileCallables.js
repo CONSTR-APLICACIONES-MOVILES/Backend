@@ -16,6 +16,7 @@ const FIELDS = {
   getScheduleFriends: ["groupId"], getScheduleDay: ["date", "friendIds"],
   importCalendarAvailability: ["startDate", "days", "intervals"],
   getProfile: [], updateProfile: ["fields", "clientUserId"], getAlerts: [], getActivities: [],
+  setActivityReminder: ["activityId", "minutesBefore"],
   markNotificationEventsRead: ["ids", "clientUserId"],
   markAlertsRead: ["ids", "clientUserId"], respondToActivityInvitation: ["id", "response", "clientUserId"],
 };
