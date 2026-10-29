@@ -122,25 +122,6 @@
         }),
       },
       {
-        id: "bq3", type: "Type 2", doc: "bq3_slot_acceptance",
-        question: "What percent of the suggested slots do organizers accept without changes, and which position is the best?",
-        hasData: (data) => data.sample_size > 0,
-        empty: "No suggested slots yet. The backend fills this every night from the slots the organizers pick.",
-        render: (data) => ({
-          number: `${data.pct_unchanged_overall ?? 0}%`,
-          detail: `accepted without changes · recommended position ${Number(data.recommended_position) + 1} · ${data.sample_size} slots`,
-          chart: {
-            labels: (data.by_position || []).map((row) => `Position ${row.slot_position + 1}`),
-            datasets: [{
-              label: "% accepted without changes",
-              data: (data.by_position || []).map((row) => row.presented ? Math.round(1000 * row.accepted_unchanged / row.presented) / 10 : 0),
-              backgroundColor: (data.by_position || []).map((row) =>
-                row.slot_position === data.recommended_position ? "#10B981" : "#A7F3D0"),
-            }],
-          },
-        }),
-      },
-      {
         id: "bq8", type: "Type 3", doc: "bq8_feature_usage",
         question: "Which features of the app are used the least?",
         hasData: (data) => data.total_uses > 0,
