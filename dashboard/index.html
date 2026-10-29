@@ -35,6 +35,7 @@
     .card .top { display: flex; gap: 8px; align-items: center; }
     .badge { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--primary-light); color: var(--primary); }
     .badge.type { background: #ECFDF5; color: #047857; }
+    .badge.test { background: var(--warning-light); color: var(--warning); }
     .card h2 { font-size: 16px; margin: 0; line-height: 1.35; }
     .big { font-size: 32px; font-weight: 800; color: var(--primary); }
     .big small { font-size: 14px; font-weight: 500; color: var(--slate); }
@@ -136,7 +137,31 @@
           horizontal: true,
         }),
       },
+      {
+        id: "bq7", type: "Type 3", doc: "bq7_creation_abandonment",
+        question: "In which step do users abandon the creation of an activity most often?",
+        hasData: (data) => data.total_flows > 0,
+        empty: "No creation attempts yet. Open New Activity in the app, then press Refresh.",
+        render: (data) => {
+          const steps = [...data.steps].sort((a, b) => a.index - b.index);
+          const finishedPct = Math.round(1000 * data.total_finished / data.total_flows) / 10;
+          return {
+            number: data.most_abandoned_step ? (STEP_NAMES[data.most_abandoned_step] || data.most_abandoned_step) : "None",
+            detail: `${data.abandon_rate}% abandoned · ${data.total_flows} attempts · ${finishedPct}% finished`,
+            chart: {
+              labels: steps.map((step) => STEP_NAMES[step.name] || step.name),
+              datasets: [{label: "% of attempts abandoned here", data: steps.map((step) => step.percent),
+                backgroundColor: steps.map((step) => step.name === data.most_abandoned_step ? "#E11D48" : "#FDA4AF")}],
+            },
+          };
+        },
+      },
     ];
+// bq7: names of the steps of the new activity form, in the order of the form
+    const STEP_NAMES = {
+      opened: "Opened", details: "Details", group: "Group", duration: "Duration",
+      date_time: "Date and time", place: "Place", review: "Review",
+    };
 
 // average of the averages, weighted by the number of calculations
     function average(rows) {
@@ -153,7 +178,7 @@
     function buildCards() {
       $("cards").innerHTML = QUESTIONS.map((q) => `
         <article class="card" id="card-${q.id}">
-          <div class="top"><span class="badge">${q.id.toUpperCase()}</span><span class="badge type">${q.type}</span></div>
+          <div class="top"><span class="badge">${q.id.toUpperCase()}</span><span class="badge type">${q.type}</span><span class="badge test" id="${q.id}-test" hidden>Test data</span></div>
           <h2>${q.question}</h2>
           <div class="big" id="${q.id}-number">…</div>
           <div class="empty" id="${q.id}-empty" hidden></div>
@@ -164,6 +189,8 @@
 
     function show(q, data) {
       const ready = data && q.hasData(data);
+// the test data label shows when some of the numbers come from the seed of the emulators
+      $(`${q.id}-test`).hidden = !(data && data.test_flows > 0);
       $(`${q.id}-empty`).hidden = ready;
       $(`${q.id}-empty`).textContent = q.empty;
       $(`${q.id}-chart`).parentElement.hidden = !ready;

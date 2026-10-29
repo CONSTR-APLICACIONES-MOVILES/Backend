@@ -60,6 +60,31 @@ async function seed() {
         status: 'PROPOSED', createdAt: FieldValue.serverTimestamp()});
     }
   }
+  await seedCreationAttempts();
+}
+
+// bq7 test data: attempts of the new activity form, some finished and some abandoned in different steps
+// they have test: true, so the dashboard shows the test data label, and fixed ids, so seeding again does not add more
+async function seedCreationAttempts() {
+  const attempts = [
+    {flow: 'seed-bq7-1', steps: [1, 2, 3, 4, 5, 6], finished: true, entry: 'dashboard'},
+    {flow: 'seed-bq7-2', steps: [2, 1, 3, 4, 5, 6], finished: true, entry: 'group'},
+    {flow: 'seed-bq7-3', steps: [1, 2], finished: false, entry: 'dashboard'},
+    {flow: 'seed-bq7-4', steps: [2, 1], finished: false, entry: 'group'},
+    {flow: 'seed-bq7-5', steps: [1, 2, 3, 4], finished: false, entry: 'slot'},
+    {flow: 'seed-bq7-6', steps: [], finished: false, entry: 'schedule'},
+    {flow: 'seed-bq7-7', steps: [1, 2, 3, 4, 5, 6], finished: false, entry: 'dashboard'},
+  ];
+  const names = ['opened', 'details', 'group', 'duration', 'date_time', 'place', 'review'];
+  const batch = db.batch();
+  for (const {flow, steps, finished, entry} of attempts) {
+    const event = (suffix, name, params) => batch.set(db.doc(`analyticsEvents/${flow}-${suffix}`),
+        {name, params: {flow_id: flow, ...params}, user_hash: null, test: true, created_at: FieldValue.serverTimestamp()});
+    event('start', 'creation_started', {entry_point: entry});
+    steps.forEach((index) => event(`step-${index}`, 'creation_step_viewed', {step_name: names[index], step_index: index}));
+    if (finished) event('end', 'creation_finished', {total_ms: 45000});
+  }
+  await batch.commit();
 }
 
 async function verify() {
