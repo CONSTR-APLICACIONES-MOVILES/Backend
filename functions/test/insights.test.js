@@ -41,7 +41,7 @@ test("no events gives the default", () => {
 
 test("every SQL file points at the real export dataset after loading", () => {
   for (const file of ["bq1_availability_latency.sql", "bq3_slot_acceptance.sql", "bq5_response_time.sql",
-    "bq8_feature_usage.sql"]) {
+    "bq8_feature_usage.sql", "bq9_comparison_confirmation.sql"]) {
     const sql = loadQuery(file, "my-project", "analytics_123");
     assert.match(sql, /`my-project\.analytics_123\.events_\*`/);
     assert.doesNotMatch(sql, /FROM `parchapp.analytics_PROPERTY_ID/);
