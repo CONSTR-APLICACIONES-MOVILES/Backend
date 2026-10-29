@@ -66,7 +66,7 @@ exports.refreshResponseTimeInsight = onSchedule(
       });
     });
 
-// team dashboard: bq1 and bq8 from the analyticsEvents the app writes, every night
+// team dashboard: bq1, bq7, bq8 and bq9 from the analyticsEvents the app writes, every night
 exports.refreshTeamInsightsNightly = onSchedule(
     {schedule: "every day 04:30", timeZone: "America/Bogota", region: "us-central1"},
     async () => {

@@ -61,6 +61,7 @@ async function seed() {
     }
   }
   await seedCreationAttempts();
+  await seedComparisonConfirmation();
 }
 
 // bq7 test data: attempts of the new activity form, some finished and some abandoned in different steps
@@ -83,6 +84,27 @@ async function seedCreationAttempts() {
     event('start', 'creation_started', {entry_point: entry});
     steps.forEach((index) => event(`step-${index}`, 'creation_step_viewed', {step_name: names[index], step_index: index}));
     if (finished) event('end', 'creation_finished', {total_ms: 45000});
+  }
+  await batch.commit();
+}
+
+// bq9 test data: activities created from Compare Availability and without it, some of them confirmed
+// they have test: true and fixed ids, like the bq7 attempts
+async function seedComparisonConfirmation() {
+  const activities = [
+    {id: 'seed-bq9-1', source: 'suggested_slot', confirmed: true},
+    {id: 'seed-bq9-2', source: 'suggested_slot', confirmed: true},
+    {id: 'seed-bq9-3', source: 'suggested_slot', confirmed: false},
+    {id: 'seed-bq9-4', source: 'group_activity', confirmed: true},
+    {id: 'seed-bq9-5', source: 'group_activity', confirmed: false},
+    {id: 'seed-bq9-6', source: 'group_activity', confirmed: false},
+  ];
+  const batch = db.batch();
+  for (const {id, source, confirmed} of activities) {
+    const event = (suffix, name, params) => batch.set(db.doc(`analyticsEvents/${id}-${suffix}`),
+        {name, params: {activity_id: id, ...params}, user_hash: null, test: true, created_at: FieldValue.serverTimestamp()});
+    event('created', 'activity_created', {source, category: 'Study', group_size: 4});
+    if (confirmed) event('confirmed', 'activity_confirmed', {category: 'Study', group_size: 4});
   }
   await batch.commit();
 }
