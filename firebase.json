@@ -3,6 +3,13 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
+  "hosting": {
+    "public": "dashboard",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "headers": [
+      {"source": "**/*.@(html|js)", "headers": [{"key": "Cache-Control", "value": "no-cache"}]}
+    ]
+  },
   "functions": [
     {
       "source": "functions",
