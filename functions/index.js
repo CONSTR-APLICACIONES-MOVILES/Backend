@@ -1,6 +1,7 @@
 const {initializeApp} = require("firebase-admin/app");
 const {getFirestore, FieldValue} = require("firebase-admin/firestore");
 const {onSchedule} = require("firebase-functions/v2/scheduler");
+const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {onDocumentCreated, onDocumentWritten} = require("firebase-functions/v2/firestore");
 const {defineString} = require("firebase-functions/params");
 const functionsV1 = require("firebase-functions/v1");
@@ -9,6 +10,7 @@ const {BigQuery} = require("@google-cloud/bigquery");
 
 const {joinDemoGroups} = require("./src/groupMembership");
 const {loadQuery, buildRecommendationInsight, buildResponseTimeInsight} = require("./src/insights");
+const {refreshTeamInsights} = require("./src/teamInsights");
 const {ActivityRepository} = require("./src/activityRepository");
 const {ActivityService} = require("./src/activityService");
 const {createActivityCallables} = require("./src/activityCallables");
@@ -63,6 +65,22 @@ exports.refreshResponseTimeInsight = onSchedule(
         completed: insight.completed,
       });
     });
+
+// team dashboard: bq1 and bq8 from the analyticsEvents the app writes, every night
+exports.refreshTeamInsightsNightly = onSchedule(
+    {schedule: "every day 04:30", timeZone: "America/Bogota", region: "us-central1"},
+    async () => {
+      const summary = await refreshTeamInsights(getFirestore(), {serverTime: FieldValue.serverTimestamp()});
+      logger.info("Team insights updated", summary);
+    });
+
+// the refresh button of the dashboard calls this, only a signed in user can do it
+exports.refreshTeamInsights = onCall({region: "us-central1"}, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to continue.");
+  const summary = await refreshTeamInsights(getFirestore(), {serverTime: FieldValue.serverTimestamp()});
+  logger.info("Team insights updated from the dashboard", summary);
+  return summary;
+});
 
 exports.resetRsvpOnNewActivity = onDocumentCreated(
     {document: "activities/{activityId}", region: "us-central1"},
