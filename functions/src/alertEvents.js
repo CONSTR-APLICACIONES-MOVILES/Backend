@@ -23,7 +23,7 @@ async function additionalAlerts(db,uid,groups,activities,now) {
     if (!group) continue;
     const a=(await db.doc(`activities/${e.activityId}`).get()).data();
     if (!a || a.participantIds && !a.participantIds.includes(uid)) continue;
-    rows.push({id:`evt_${doc.id}`,kind:e.kind,title:e.title,description:e.description,createdAt:iso(e.createdAt),studySessionId:e.activityId});
+    rows.push({id:`evt_${doc.id}`,kind:e.kind,title:e.title,description:e.description,createdAt:iso(e.createdAt),studySessionId:e.activityId,strategy:e.strategy||null,sequence:e.sequence||null});
   }
   for (const doc of invites.docs) {
     const i=doc.data(); if(i.state!=='pending' || i.expiresAt.toDate()<=now || authorized.has(doc.id)) continue;
