@@ -9,6 +9,14 @@
       ]
     },
     {
+      "collectionGroup": "activities",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "groupId", "order": "ASCENDING"},
+        {"fieldPath": "createdAt", "order": "ASCENDING"}
+      ]
+    },
+    {
       "collectionGroup": "reminders",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
