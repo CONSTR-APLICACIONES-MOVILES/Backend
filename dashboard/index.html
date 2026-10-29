@@ -156,6 +156,27 @@
           };
         },
       },
+      {
+        id: "bq9", type: "Type 3", doc: "bq9_comparison_confirmation",
+        question: "How often is Compare Availability used before creating an activity, and how does it affect the share of activities that reach Confirmed?",
+        hasData: (data) => data.total_activities > 0,
+        empty: "No activities yet. Create a plan from Compare Availability and another one without it, then press Refresh.",
+        render: (data) => {
+          const withCompare = data.groups.find((row) => row.usage === "with_comparison");
+          const withoutCompare = data.groups.find((row) => row.usage === "without_comparison");
+          return {
+            number: `${data.comparison_rate}%`,
+            detail: `of ${data.total_activities} activities used Compare · ${withCompare.confirmation_pct}% confirmed with it, ${withoutCompare.confirmation_pct}% without`,
+            chart: {
+              labels: ["With Compare", "Without Compare"],
+              datasets: [
+                {label: "Created", data: [withCompare.created, withoutCompare.created], backgroundColor: "#93C5FD"},
+                {label: "Confirmed", data: [withCompare.confirmed, withoutCompare.confirmed], backgroundColor: "#10B981"},
+              ],
+            },
+          };
+        },
+      },
     ];
 // bq7: names of the steps of the new activity form, in the order of the form
     const STEP_NAMES = {

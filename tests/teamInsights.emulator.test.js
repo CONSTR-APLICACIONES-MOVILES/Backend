@@ -31,6 +31,10 @@ test.before(async () => {
   await add("creation_step_viewed", {flow_id: "emu-b", step_index: 1});
   await add("creation_step_viewed", {flow_id: "emu-b", step_index: 2});
   await add("creation_started", {flow_id: "emu-c", entry_point: "slot"});
+// bq9: one plan from compare that got confirmed and one without compare that did not
+  await add("activity_created", {activity_id: "emu-act-1", source: "suggested_slot"});
+  await add("activity_confirmed", {activity_id: "emu-act-1"});
+  await add("activity_created", {activity_id: "emu-act-2", source: "group_activity"});
 });
 
 test.after(async () => {
@@ -49,4 +53,13 @@ test("refresh writes insights/bq7_creation_abandonment from the events in firest
   assert.equal(insight.steps.find((step) => step.name === "group").abandoned, 1);
   assert.equal(insight.steps.find((step) => step.name === "opened").abandoned, 1);
   assert.ok(insight.updated_at);
+});
+
+test("refresh writes insights/bq9_comparison_confirmation from the events in firestore", async () => {
+  await refreshTeamInsights(db, {now});
+  const insight = (await db.doc("insights/bq9_comparison_confirmation").get()).data();
+  assert.equal(insight.total_activities, 2);
+  assert.equal(insight.comparison_rate, 50);
+  assert.deepEqual(insight.groups.map((row) => row.confirmation_pct), [100, 0]);
+  assert.equal(insight.confirmation_difference, 100);
 });

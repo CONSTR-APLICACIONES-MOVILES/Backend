@@ -1,7 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
-  FEATURES, percentile, buildEngineLatency, buildFeatureUsage, buildCreationAbandonment, refreshTeamInsights,
+  FEATURES, percentile, buildEngineLatency, buildFeatureUsage, buildCreationAbandonment, buildComparisonConfirmation,
+  refreshTeamInsights,
 } = require("../src/teamInsights");
 
 const engine = (size, ms) => ({name: "availability_calc", params: {group_size: size, duration_ms: ms}});
@@ -39,11 +40,19 @@ test("without events the dashboard gets empty insights, not an error", () => {
   assert.equal(usage.least_used, null);
 });
 
-test("refresh reads the window and writes bq1, bq7 and bq8 without touching bq3", async () => {
+test("refresh reads the window and writes bq1, bq7, bq8 and bq9 without touching bq3", async () => {
   const written = {};
   let since;
+  let activitiesSince;
   const db = {
     collection: (name) => {
+      if (name === "activities") {
+        return {where: (field, op, value) => {
+          assert.equal(field, "createdAt");
+          activitiesSince = value;
+          return {get: async () => ({docs: [{id: "a1", data: () => ({status: "CONFIRMED"})}]})};
+        }};
+      }
       assert.equal(name, "analyticsEvents");
       return {where: (field, op, value) => {
         assert.equal(field, "created_at");
@@ -55,13 +64,15 @@ test("refresh reads the window and writes bq1, bq7 and bq8 without touching bq3"
   };
   const now = new Date("2026-10-29T12:00:00Z");
   const summary = await refreshTeamInsights(db, {now});
-  assert.deepEqual(Object.keys(written).sort(),
-      ["insights/bq1_engine_latency", "insights/bq7_creation_abandonment", "insights/bq8_feature_usage"]);
+  assert.deepEqual(Object.keys(written).sort(), ["insights/bq1_engine_latency", "insights/bq7_creation_abandonment",
+    "insights/bq8_feature_usage", "insights/bq9_comparison_confirmation"]);
+  assert.equal(written["insights/bq9_comparison_confirmation"].total_activities, 1);
+  assert.equal(activitiesSince.toISOString(), "2026-09-29T12:00:00.000Z");
   assert.equal(written["insights/bq1_engine_latency"].total_events, 2);
   assert.equal(written["insights/bq8_feature_usage"].updated_at, now);
   assert.equal(written["insights/bq7_creation_abandonment"].total_flows, 0);
   assert.equal(since.toISOString(), "2026-09-29T12:00:00.000Z");
-  assert.deepEqual(summary, {total_events: 2, calculations: 1, feature_uses: 1, creation_flows: 0});
+  assert.deepEqual(summary, {total_events: 2, calculations: 1, feature_uses: 1, creation_flows: 0, activities: 1});
 });
 
 // bq7 helpers: one attempt with its steps and an optional end
@@ -107,4 +118,49 @@ test("bq7 without attempts gives an empty result, not an error", () => {
   assert.equal(insight.total_flows, 0);
   assert.equal(insight.abandon_rate, 0);
   assert.equal(insight.most_abandoned_step, null);
+});
+
+// bq9 helpers: the events the android app logs when it creates and sees a confirmed activity
+const created = (id, source, extra = {}) => ({name: "activity_created", params: {activity_id: id, source, ...extra}});
+const confirmed = (id) => ({name: "activity_confirmed", params: {activity_id: id}});
+
+test("bq9 splits the activities by compare use and counts how many reach confirmed", () => {
+  const insight = buildComparisonConfirmation([
+    created("a1", "suggested_slot"), confirmed("a1"),
+    created("a2", "suggested_slot"),
+    created("a3", "group_activity"), confirmed("a3"),
+    created("a4", "group_activity"), created("a5", "group_activity"),
+  ]);
+  assert.deepEqual(insight.groups, [
+    {usage: "with_comparison", created: 2, confirmed: 1, confirmation_pct: 50},
+    {usage: "without_comparison", created: 3, confirmed: 1, confirmation_pct: 33.3},
+  ]);
+  assert.equal(insight.total_activities, 5);
+  assert.equal(insight.comparison_rate, 40);
+  assert.equal(insight.confirmation_difference, 16.7);
+});
+
+test("bq9 uses the activity documents too: flutter comparisons and the real confirmed status", () => {
+  const insight = buildComparisonConfirmation([created("f1", undefined, {comparison_id: "c1"})], [
+    {id: "f1", status: "CONFIRMED"},
+    {id: "w1", status: "PROPOSED", planningContext: {comparisonUsed: true}},
+    {id: "w2", status: "CONFIRMED", planningContext: {comparisonUsed: false}},
+  ]);
+  assert.deepEqual(insight.groups[0], {usage: "with_comparison", created: 2, confirmed: 1, confirmation_pct: 50});
+  assert.deepEqual(insight.groups[1], {usage: "without_comparison", created: 1, confirmed: 1, confirmation_pct: 100});
+});
+
+test("bq9 ignores confirmations without a created activity and marks test data", () => {
+  const insight = buildComparisonConfirmation([confirmed("ghost"), {...created("t1", "suggested_slot"), test: true},
+    {name: "activity_created", params: {}}]);
+  assert.equal(insight.total_activities, 1);
+  assert.equal(insight.test_flows, 1);
+  assert.equal(insight.confirmation_difference, null);
+});
+
+test("bq9 without activities gives an empty result, not an error", () => {
+  const insight = buildComparisonConfirmation([]);
+  assert.equal(insight.total_activities, 0);
+  assert.equal(insight.comparison_rate, 0);
+  assert.equal(insight.confirmation_difference, null);
 });

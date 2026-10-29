@@ -97,22 +97,87 @@ function buildCreationAbandonment(events) {
   };
 }
 
-// reads the events of the window, writes bq1, bq7 and bq8 and gives back a short summary
+// bq9: the same event names and source as AnalyticsEvents in the android app
+const CREATED_EVENT = "activity_created";
+const CONFIRMED_EVENT = "activity_confirmed";
+const SUGGESTED_SLOT = "suggested_slot";
+const ACTIVITIES = "activities";
+
+// bq9: one row per activity, from the activity_created events and from the activities documents
+// with comparison: the event came from a Compare Availability slot (android) or has a comparison_id (flutter),
+// or the activity was published with a planning comparison
+// confirmed: the activity is CONFIRMED in firestore, or a phone logged activity_confirmed for it
+function buildComparisonConfirmation(events, activities = []) {
+  const rows = new Map();
+  const row = (id) => {
+    if (!rows.has(id)) rows.set(id, {created: false, comparison: false, confirmed: false, test: false});
+    return rows.get(id);
+  };
+  const confirmedByEvent = new Set();
+  for (const event of events) {
+    const id = event.params?.activity_id;
+    if (typeof id !== "string" || !id) continue;
+    if (event.name === CREATED_EVENT) {
+      const activity = row(id);
+      activity.created = true;
+      if (event.params.source === SUGGESTED_SLOT || event.params.comparison_id) activity.comparison = true;
+      if (event.test === true) activity.test = true;
+    } else if (event.name === CONFIRMED_EVENT) {
+      confirmedByEvent.add(id);
+    }
+  }
+  for (const doc of activities) {
+    if (!doc.id) continue;
+    const activity = row(doc.id);
+    activity.created = true;
+    if (doc.planningContext?.comparisonUsed === true) activity.comparison = true;
+    if (doc.status === "CONFIRMED") activity.confirmed = true;
+  }
+  for (const id of confirmedByEvent) {
+    if (rows.has(id)) rows.get(id).confirmed = true;
+  }
+  const created = [...rows.values()].filter((activity) => activity.created);
+  const group = (usage, comparison) => {
+    const list = created.filter((activity) => activity.comparison === comparison);
+    const confirmed = list.filter((activity) => activity.confirmed).length;
+    return {usage, created: list.length, confirmed, confirmation_pct: list.length ? round((100 * confirmed) / list.length) : 0};
+  };
+  const withComparison = group("with_comparison", true);
+  const withoutComparison = group("without_comparison", false);
+  return {
+    groups: [withComparison, withoutComparison],
+    total_activities: created.length,
+// how often compare is used before creating an activity
+    comparison_rate: created.length ? round((100 * withComparison.created) / created.length) : 0,
+// how many points more (or less) activities reach confirmed when compare was used, null until both groups have data
+    confirmation_difference: withComparison.created && withoutComparison.created ?
+      round(withComparison.confirmation_pct - withoutComparison.confirmation_pct) : null,
+    test_flows: created.filter((activity) => activity.test).length,
+  };
+}
+
+// reads the events and the activities of the window, writes bq1, bq7, bq8 and bq9 and gives back a short summary
 // bq3 is not written here, it has its own function
 async function refreshTeamInsights(db, {now = new Date(), serverTime} = {}) {
   const since = new Date(now.getTime() - WINDOW_DAYS * 24 * 60 * 60 * 1000);
-  const snapshot = await db.collection(EVENTS).where("created_at", ">=", since).get();
+  const [snapshot, activitySnapshot] = await Promise.all([
+    db.collection(EVENTS).where("created_at", ">=", since).get(),
+    db.collection(ACTIVITIES).where("createdAt", ">=", since).get(),
+  ]);
   const events = snapshot.docs.map((doc) => doc.data());
+  const activities = activitySnapshot.docs.map((doc) => ({id: doc.id, ...doc.data()}));
   const common = {total_events: events.length, window_start: since, window_end: now, updated_at: serverTime ?? now};
   const engine = buildEngineLatency(events);
   const usage = buildFeatureUsage(events);
   const creation = buildCreationAbandonment(events);
+  const comparison = buildComparisonConfirmation(events, activities);
   await db.doc("insights/bq1_engine_latency").set({...engine, ...common});
   await db.doc("insights/bq8_feature_usage").set({...usage, ...common});
   await db.doc("insights/bq7_creation_abandonment").set({...creation, ...common});
+  await db.doc("insights/bq9_comparison_confirmation").set({...comparison, ...common});
   return {total_events: events.length, calculations: engine.total_calculations, feature_uses: usage.total_uses,
-    creation_flows: creation.total_flows};
+    creation_flows: creation.total_flows, activities: comparison.total_activities};
 }
 
 module.exports = {FEATURES, WINDOW_DAYS, CREATION_STEPS, percentile, buildEngineLatency, buildFeatureUsage,
-  buildCreationAbandonment, refreshTeamInsights};
+  buildCreationAbandonment, buildComparisonConfirmation, refreshTeamInsights};
