@@ -18,6 +18,10 @@ async function account(email){const endpoint='http://127.0.0.1:9099/identitytool
       await auth.createUser({uid:'local-test-social-peer',email:'social.peer@example.test',password:'MetricsQa123!'});
     }
     const owner=await account('metrics.owner@example.test'),outsider=await account('social.peer@example.test');
+    const adminAuth=req('firebase-admin/auth').getAuth(app);
+    await adminAuth.setCustomUserClaims(owner.localId,{orgAnalytics:true});
+    owner.idToken=(await account('metrics.owner@example.test')).idToken;
+
     assert.equal(outsider.localId,'local-test-social-peer');
     const call=async(name,data={},who=owner,status=200)=>{const r=await post(`http://127.0.0.1:5001/${project}/us-central1/${name}`,{data},who?.idToken);assert.equal(r.status,status,`${name}: ${JSON.stringify(r.body)}`);return r.body.result??r.body.data;};
     await call('setUsername',{username:'activity.qa'});await call('setUsername',{username:'friend.qa'},outsider);
@@ -45,7 +49,7 @@ async function account(email){const endpoint='http://127.0.0.1:9099/identitytool
         const id=`bq14-fixture-${delay}-${i}`,activityId=`mobile-${createHash('sha256').update(JSON.stringify([owner.localId,id])).digest('hex').slice(0,40)}`;
         if(chooseReminderPolicy(activityId,2,clock,null,'test').strategy===strategy){requestId=id;break;}
       }
-      const created=await service.publishActivity(owner.localId,{requestId,groupId:'metrics-qa',fields:{title:`BQ14 ${delay} minute fixture`,status:'PROPOSED'},
+      const created=await service.publishActivity(owner.localId,{measurementVersion:1,requestId,groupId:'metrics-qa',fields:{title:`BQ14 ${delay} minute fixture`,status:'PROPOSED'},
         startTime:`${day}T20:00:00Z`,endTime:`${day}T21:00:00Z`,timeZone:'America/Bogota'});
       cohort.push({...created,delay});
     }

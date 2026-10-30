@@ -34,6 +34,38 @@ function parseInstant(value, name) {
   return new Date(value);
 }
 
+// bq3: the slots shown in compare availability, in the same order the organizer saw them
+// the app only sends the times, the backend counts who is free in each one, so the app can not fake it
+// accepting a slot later still checks availability and minimum notice
+const MAX_CANDIDATES = 10;
+function candidateSlots(candidates, context) {
+  requireThat(Array.isArray(candidates) && candidates.length > 0 && candidates.length <= MAX_CANDIDATES,
+      "invalid-argument", `Supply 1 to ${MAX_CANDIDATES} candidates.`);
+  const midnight = dayStart(context.date);
+  const seen = new Set();
+  return candidates.map((candidate, index) => {
+    requireThat(candidate && typeof candidate === "object" && !Array.isArray(candidate) &&
+        Object.keys(candidate).every((key) => key === "startTime" || key === "endTime"),
+    "invalid-argument", "Each candidate has only startTime and endTime.");
+    const start = parseInstant(candidate.startTime, `candidates[${index}].startTime`);
+    const end = parseInstant(candidate.endTime, `candidates[${index}].endTime`);
+    const startMinute = (start.getTime() - midnight) / MINUTE;
+    const endMinute = (end.getTime() - midnight) / MINUTE;
+    requireThat(startMinute >= 0 && startMinute < endMinute && endMinute <= 1440,
+        "invalid-argument", "Candidates must be inside the requested day.");
+    const key = `${start.toISOString()}|${end.toISOString()}`;
+    requireThat(!seen.has(key), "invalid-argument", "Candidates must be distinct.");
+    seen.add(key);
+    return {
+      startTime: start.toISOString(), endTime: end.toISOString(),
+      availableParticipants: context.members.filter((member) => isAvailable(member, startMinute, endMinute)).length,
+      totalParticipants: context.members.length,
+      score: null,
+      reasons: ["Shown in Compare Availability"],
+    };
+  });
+}
+
 class ActivityService {
   constructor(repository, {clock = () => new Date(), engine = new AvailabilityEngine(),
     ranker = new ContextAwareSlotRankingStrategy()} = {}) {
@@ -92,7 +124,11 @@ class ActivityService {
       const batchId = randomUUID();
       const ranker = {rank:(slots, ctx) => rankWithHistory(this.ranker.rank(slots,ctx),ctx,
         confirmationInsight,activity.category,now,environment(this.repository.db || {}))};
-      const slots = recommendationSlots(context, this.engine, ranker);
+      // Java supplies candidates in the order actually displayed (BQ3).
+      // History only reorders server-generated candidates, never that client list.
+      const slots = input.candidates === undefined
+        ? recommendationSlots(context, this.engine, ranker)
+        : candidateSlots(input.candidates, context);
       const recommendations = slots.map((slot, position) => {
         const id = randomUUID();
         const record = {

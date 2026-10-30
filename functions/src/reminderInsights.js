@@ -22,7 +22,7 @@ function chooseReminderPolicy(activityId,size,now,insight,env='production') {
 async function dispatchReminder(db,ref,now=new Date()) {
   return db.runTransaction(async tx=>{
     const reminder=(await tx.get(ref)).data();
-    if(!reminder || reminder.status!=='SCHEDULED' || stamp(reminder.scheduledAt)>+now)return false;
+    if(!reminder || reminder.status!=='SCHEDULED' || stamp(reminder.scheduledAt)>+now)return 'skipped';
     const parts=ref.path.split('/'),uid=parts[1],activityId=parts[3];
     const inboxRef=db.doc(`inboxes/${uid}/items/${activityId}`),activityRef=db.doc(`activities/${activityId}`);
     const inbox=(await tx.get(inboxRef)).data(),activity=(await tx.get(activityRef)).data();
@@ -34,26 +34,32 @@ async function dispatchReminder(db,ref,now=new Date()) {
     const cancelled=!activity || activity.cancelled || !group?.memberIds?.includes(uid) ||
       (!rsvp && !personal) || (rsvp && (!inbox || !!inbox.response || activity.status==='CONFIRMED' ||
         !!measurement?.firstConfirmedAt || +now>=close || activity.participantIds && !activity.participantIds.includes(uid)));
-    if(cancelled){tx.update(ref,{status:'CANCELLED',cancelledAt:now});return false;}
+    if(cancelled || stamp(activity?.startTime)<=+now){tx.update(ref,{status:'CANCELLED',cancelledAt:now});return 'cancelled';}
     const eventId=`reminder-${activityId}-${reminder.sequence||1}`;
     tx.set(db.doc(`alertEvents/${uid}/items/${eventId}`),{activityId,groupId:activity.groupId,kind:'reminder',
       title:personal?`Upcoming activity: ${activity.title}`:`Pending response: ${activity.title}`,
       description:[activity.date,activity.time,activity.location].filter(Boolean).join(' · '),
-      createdAt:now,purpose:reminder.purpose,strategy:reminder.strategy,sequence:reminder.sequence||1,channel:'in-app'});
+      createdAt:now,sentAt:now,reminderId:eventId,purpose:reminder.purpose,strategy:reminder.strategy,
+      delayMinutes:reminder.delayMinutes??reminder.minutesBefore??activity?.reminderPolicy?.delayMinutes??null,
+      sequence:reminder.sequence||1,channel:'in-app'});
     tx.update(ref,{status:'SENT',sentAt:now});
     tx.set(inboxRef,{reminderCount:(inbox?.reminderCount||0)+1,lastReminderAt:now,lastReminderStrategy:reminder.strategy},{merge:true});
     if(rsvp)tx.set(db.doc(`reminderDeliveries/${createHash('sha256').update(ref.path).digest('hex')}`),{
       activityId,recipientId:uid,strategy:reminder.strategy,sequence:reminder.sequence||1,sentAt:now,
       environment:environment(db),purpose:'rsvp',channel:'in-app'});
-    return true;
+    return 'sent';
   });
 }
 async function dispatchPendingReminders(db,now=new Date()) {
   const pending=await db.collectionGroup('reminders').where('status','==','SCHEDULED').where('scheduledAt','<=',now).limit(200).get();
-  let dispatched=0;
+  let dispatched=0,cancelled=0;
   // Bounded writes per transaction rather than a 500-document batch with >500 writes.
-  for(const reminder of pending.docs) if(await dispatchReminder(db,reminder.ref,now))dispatched++;
-  return {checked:pending.size,dispatched};
+  for(const reminder of pending.docs) {
+    const state=await dispatchReminder(db,reminder.ref,now);
+    if(state==='sent')dispatched++;
+    else if(state==='cancelled')cancelled++;
+  }
+  return {checked:pending.size,dispatched,cancelled};
 }
 
 function buildReminderInsight(records,measurements,deliveries,now=new Date(),env='production') {

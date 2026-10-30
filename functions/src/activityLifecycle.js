@@ -2,6 +2,7 @@ const {createHash, randomUUID} = require('node:crypto');
 const {CAMPUS_AREAS} = require("./campusAreas");
 const {requireThat, documentId, integer} = require('./errors');
 const {localDate, dayStart, MINUTE, hasSchedule, TIME_ZONE} = require('./availability');
+const {chooseRsvpReminderDelay} = require('./reminderTiming');
 
 const {canShare} = require('./communityService');
 const {consumeComparison} = require('./coordinationInsights');
@@ -147,6 +148,7 @@ class ActivityLifecycle {
       }
       const group = (await tx.get(this.db.doc(`groups/${input.groupId}`))).data();
       requireThat(group?.memberIds?.includes(uid), 'permission-denied', 'Group membership is required.');
+      const reminderTimingInsight = (await tx.get(this.db.doc('insights/bq6_reminder_timing'))).data();
       const ids = participants(input.participantIds, group, uid);
       const now = this.clock();
       const scheduled = input.startTime != null || input.endTime != null;
@@ -164,8 +166,10 @@ class ActivityLifecycle {
          availability = await availabilitySnapshot(this.db, tx, group, ids, slot, now, uid);
       }
       const attribution = await consumeComparison(this.db, tx, uid, input, ids, activityId, now, slot?.date);
-      const reminderInsight = slot && ids.length>1 ? (await tx.get(this.db.doc('insights/bq14_reminder_effectiveness'))).data() : null;
-      const reminderPolicy = slot && ids.length>1 ? require('./reminderInsights').chooseReminderPolicy(activityId,ids.length,now,reminderInsight,require('./activityInsights').environment(this.db)) : null;
+      // Versioned Flutter publications opt in to a frozen per-activity BQ14
+      // cohort. Legacy clients retain main's per-recipient BQ6 timing contract.
+      const reminderInsight = input.measurementVersion===1 && slot && ids.length>1 ? (await tx.get(this.db.doc('insights/bq14_reminder_effectiveness'))).data() : null;
+      const reminderPolicy = input.measurementVersion===1 && slot && ids.length>1 ? require('./reminderInsights').chooseReminderPolicy(activityId,ids.length,now,reminderInsight,require('./activityInsights').environment(this.db)) : null;
       const receipt = {activityId, created: true, scheduled,
         confirmed: fields.status === 'CONFIRMED', invitationCount: ids.filter(id => id !== uid).length,
         startTime: slot?.start.toISOString() ?? null, endTime: slot?.end.toISOString() ?? null,
@@ -213,6 +217,14 @@ class ActivityLifecycle {
             closesAt:new Date(Math.min(+slot.start,+now+86400000)),
             deliveredAt: null, openedAt: null, respondedAt: null, status: 'SCHEDULED',
           }, {merge: true});
+        } else if (slot && !reminderPolicy && fields.status!=='CONFIRMED') {
+          const delayMinutes = chooseRsvpReminderDelay(activityId,participantId,
+            reminderTimingInsight?.recommended_delay_minutes,Math.floor((+slot.start-+now)/MINUTE));
+          if(delayMinutes!=null)tx.set(this.db.doc(`inboxes/${participantId}/items/${activityId}/reminders/initial`),{
+            activityId,purpose:'rsvp',strategy:`rsvp_after_${delayMinutes}_min`,sequence:1,delayMinutes,
+            scheduledAt:new Date(+now+delayMinutes*MINUTE),sentAt:null,
+            deliveredAt:null,openedAt:null,respondedAt:null,status:'SCHEDULED',
+          },{merge:true});
         }
       }
       tx.create(commandRef, {fingerprint, receipt, createdAt: now});

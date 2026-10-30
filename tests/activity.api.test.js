@@ -19,7 +19,7 @@ const group = {
     busy: [], preferredStart: 600, preferredEnd: 720})),
 };
 const call = (name, data = {}, uid = "organizer") => api[name].run({
-  data: {activityId, ...data}, auth: uid ? {uid} : undefined,
+  data: {activityId, ...data}, auth: uid ? {uid,token:{orgAnalytics:name === "getActivityRecommendationAnalytics"}} : undefined,
 });
 const generate = (options = {}) => call("getActivityRecommendations", {durationMinutes: 60, limit: 3, ...options});
 const present = (result) => call("presentActivityRecommendations", {
@@ -63,6 +63,7 @@ test("activity details work for members and legacy activities have explicit unkn
 
 test("callables enforce authentication, membership, organizer ownership and IDs", async () => {
   await assert.rejects(call("getActivity", {}, null), {code: "unauthenticated"});
+  await assert.rejects(api.getActivityRecommendationAnalytics.run({data:{activityId},auth:{uid:"organizer",token:{}}}),{code:"permission-denied"});
   await assert.rejects(call("getActivity", {}, "outsider"), {code: "permission-denied"});
   for (const name of ["getActivityRecommendations", "getActivityRecommendationAnalytics"]) {
     await assert.rejects(call(name, {}, "member"), {code: "permission-denied"});
@@ -109,6 +110,40 @@ test("modified choice updates schedule without increasing unchanged numerator", 
   assert.equal(metric.pct_unchanged_overall, 0);
   assert.equal(metric.by_position[0].accepted, 1);
   assert.equal((await call("getActivity")).startTime, "2026-10-02T18:00:00.000Z");
+});
+
+// bq3: the app sends the slots the organizer saw, the positions and the free count must match that list
+test("app candidates keep the order the organizer saw and the backend counts who is free", async () => {
+  await db.doc("groups/g1").update({members: group.members.map((member) =>
+    member.id === "member" ? {...member, busy: [{start: 900, end: 960}]} : member)});
+  const candidates = [
+    {startTime: "2026-10-02T20:00:00.000Z", endTime: "2026-10-02T21:00:00.000Z"},
+    {startTime: "2026-10-02T15:00:00.000Z", endTime: "2026-10-02T16:00:00.000Z"},
+    {startTime: "2026-10-02T14:00:00.000Z", endTime: "2026-10-02T15:00:00.000Z"},
+  ];
+  const result = await generate({candidates, minimumNoticeMinutes: 0});
+  assert.deepEqual(result.recommendations.map((r) => r.startTime), candidates.map((c) => c.startTime));
+  assert.deepEqual(result.recommendations.map((r) => r.availableParticipants), [1, 2, 2]);
+  await present(result);
+  await accept(result.recommendations[1].id);
+  const metric = await call("getActivityRecommendationAnalytics");
+  assert.equal(metric.by_position[1].accepted_unchanged, 1);
+  assert.equal(metric.by_position[0].accepted_unchanged, 0);
+  assert.equal((await call("getActivity")).startTime, candidates[1].startTime);
+});
+
+test("app candidates must be inside the day, distinct, with only times and at most ten", async () => {
+  const slot = {startTime: "2026-10-02T15:00:00.000Z", endTime: "2026-10-02T16:00:00.000Z"};
+  const halfHours = Array.from({length: 11}, (_, i) => {
+    const start = new Date(Date.parse("2026-10-02T13:00:00.000Z") + i * 30 * 60000);
+    return {startTime: start.toISOString(), endTime: new Date(start.getTime() + 30 * 60000).toISOString()};
+  });
+  await assert.rejects(generate({candidates: []}), {code: "invalid-argument"});
+  await assert.rejects(generate({candidates: [slot, slot]}), {code: "invalid-argument"});
+  await assert.rejects(generate({candidates: [{startTime: "2026-10-03T15:00:00.000Z", endTime: "2026-10-03T16:00:00.000Z"}]}),
+      {code: "invalid-argument"});
+  await assert.rejects(generate({candidates: [{...slot, availableParticipants: 2}]}), {code: "invalid-argument"});
+  await assert.rejects(generate({candidates: halfHours}), {code: "invalid-argument"});
 });
 
 test("concurrent conflicting decisions commit exactly one outcome for the whole batch", async () => {

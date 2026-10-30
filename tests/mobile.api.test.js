@@ -186,7 +186,7 @@ test("concurrent conflicting invitation responses commit exactly one choice", as
 
 test("signup creates missing demo groups and repeated concurrent delivery never duplicates members", async () => {
   const user = {uid: "newcomer", email: "new.user@example.test"};
-  await Promise.all([joinDemoGroups(db, user), joinDemoGroups(db, user)]);
+  await Promise.all([joinDemoGroups(db, user, {emulator:true}), joinDemoGroups(db, user, {emulator:true})]);
   const groups = await db.collection("groups").where("memberIds", "array-contains", user.uid).get();
   assert.equal(groups.size, 5);
   for (const group of groups.docs) {

@@ -67,6 +67,28 @@ class MobileService {
     const doc = await this.db.doc('insights/bq9_comparison_confirmation').get();
     return {insight:doc.exists ? doc.data() : null};
   }
+  async getResponseTimeEstimates(uid) {
+    const groups = await this.groups(uid);
+    if (!groups.length) return {by_group_size:[]};
+    const insight = (await this.db.doc('insights/bq5_response_time').get()).data();
+    const rows = (insight?.by_group_size || []).filter(r => Number.isInteger(r.group_size) &&
+      r.group_size > 0 && Number.isFinite(r.estimate_minutes) && r.estimate_minutes > 0 &&
+      ['all_responded','per_response'].includes(r.estimate_kind));
+    const estimates = new Map();
+    for (const group of groups) {
+      const size = group.data().memberIds?.length || 0;
+      if (!size) continue;
+      const nearest = [...rows].sort((a,b) => Math.abs(a.group_size-size)-Math.abs(b.group_size-size) || a.group_size-b.group_size)[0];
+      if (nearest) estimates.set(size,{group_size:size,estimate_minutes:nearest.estimate_minutes,estimate_kind:nearest.estimate_kind});
+    }
+    // Only the prediction applicable to this user's groups leaves the server.
+    return {by_group_size:[...estimates.values()]};
+  }
+  async getRecommendedSlotPosition() {
+    const insight = (await this.db.doc('insights/bq3_slot_acceptance').get()).data();
+    const position = insight?.recommended_position;
+    return {position:Number.isInteger(position) && position >= 1 && position <= 10 ? position : 1};
+  }
   publishActivity(uid, input) { return this.lifecycle.publishActivity(uid, input); }
   recordCreationAttempt(uid, input) { return require('./activityInsights').recordCreationAttempt(this.db, uid, input, this.clock()); }
   updateActivityDetails(uid, input) { return this.lifecycle.mutate(uid, input, false); }

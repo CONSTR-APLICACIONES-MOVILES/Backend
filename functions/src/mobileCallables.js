@@ -1,10 +1,11 @@
 const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {ServiceError} = require("./errors");
+const {requireOrganizationAnalytics} = require('./organizationAccess');
 const FIELDS = {
   setUsername:['username','clientUserId'], searchPeople:['query','cursor','limit'],getPublicPerson:['userId'],
   getFriends:['cursor','limit'],changeFriendship:['userId','action','expectedVersion','clientUserId'],
   recordCreationAttempt: ['attemptId','requestId','phase','startedAt','outcome','durationMs','errorCode','clientUserId'],
-  getCoordinationInsight: [], prepareProposalComparison: ['date', 'friendIds'],
+  getCoordinationInsight: [], getResponseTimeEstimates: [], getRecommendedSlotPosition: [], prepareProposalComparison: ['date', 'friendIds'],
   discover: ['query','kind','category','cursor','limit'], getSharedProfile: ['userId'],
   getActivityMaterials: ['activityId'], saveActivityMaterials: ['activityId','expectedVersion','topics','resources','clientUserId'], setTopicCompletion: ['activityId','topicId','completed','clientUserId'],
   createShareLink: ['requestId','kind','entityId','hours','clientUserId'], resolveShareLink: ['token'], joinSharedGroup: ['token','clientUserId'],
@@ -28,6 +29,7 @@ function createMobileCallables(service) {
   return Object.fromEntries(Object.entries(FIELDS).map(([name, fields]) => [name,
     onCall({region: "us-central1"}, async (request) => {
       if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to continue.");
+      if (name === 'getCoordinationInsight') requireOrganizationAnalytics(request);
       if (request.data?.clientUserId !== undefined && request.data.clientUserId !== request.auth.uid) {
         throw new HttpsError("permission-denied", "This pending operation belongs to another account.");
       }

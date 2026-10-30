@@ -71,8 +71,8 @@
     <button class="primary" type="submit">Sign in</button>
   </form>
 
+  <p class="status" id="status" role="status"></p>
   <main id="dashboard" hidden>
-    <p class="status" id="status"></p>
     <div class="grid" id="cards"></div>
   </main>
 
@@ -109,7 +109,7 @@
 // one entry per business question, to add bq7 later copy one entry and change the document and the render
     const QUESTIONS = [
       {
-        id:"bq14",owner:"Equipo de anal?tica",type:"Reminder strategies",doc:"bq14_reminder_effectiveness",
+        id:"bq14",owner:"Equipo de analítica",type:"Reminder strategies",doc:"bq14_reminder_effectiveness",
         question:"¿Qué estrategia de recordatorios confirma antes con menos avisos, según el tamaño del grupo?",
         hasData:data=>data.total>0,
         empty:"Sin actividades instrumentadas para comparar estrategias. No hay un ganador demostrado.",
@@ -122,7 +122,7 @@
         }),
       },
       {
-        id: "bq2", type: "Type 1", owner: "Equipo de anal?tica", doc: "bq2_creation_reliability",
+        id: "bq2", type: "Type 1", owner: "Equipo de analítica", doc: "bq2_creation_reliability",
         question: "¿Qué porcentaje de solicitudes de creación falla o termina en timeout?",
         hasData: data => data.attempts > 0,
         empty: "Sin intentos instrumentados en los últimos 30 días. No se calcula una tasa con denominador vacío.",
@@ -135,7 +135,7 @@
         }),
       },
       {
-        id: "bq13", type: "Type 5", owner: "Equipo de anal?tica", doc: "bq13_recommendation_confirmation",
+        id: "bq13", type: "Type 5", owner: "Equipo de analítica", doc: "bq13_recommendation_confirmation",
         question: "¿Qué horarios recomendados logran mayor tasa de confirmación en grupos similares?",
         hasData: data => data.opportunities > 0,
         empty: "Sin recomendaciones presentadas en los últimos 30 días. Se conserva el ranking base.",
@@ -379,14 +379,21 @@
 
     $("sign-out").addEventListener("click", () => signOut(auth));
 
-// the dashboard only shows after the user signs in, the rules only let signed in users read insights
-    onAuthStateChanged(auth, (user) => {
+// A Firebase session alone does not grant organization analytics access.
+    onAuthStateChanged(auth, async (user) => {
+      $("dashboard").hidden = true;
+      $("refresh").hidden = true;
+      let allowed = false;
+      try { allowed = user ? (await user.getIdTokenResult()).claims.orgAnalytics === true : false; }
+      catch { $("status").textContent = "No se pudo verificar el acceso de la organización. Inicia sesión otra vez."; }
+      if (auth.currentUser?.uid !== user?.uid) return;
       $("login").hidden = !!user;
-      $("dashboard").hidden = !user;
-      $("refresh").hidden = !user;
+      $("dashboard").hidden = !allowed;
+      $("refresh").hidden = !allowed;
       $("sign-out").hidden = !user;
       $("who").textContent = user ? user.email : "";
-      if (user) load();
+      $("status").textContent = user && !allowed ? "Esta cuenta no tiene acceso al dashboard de la organización. Solicita el permiso orgAnalytics al administrador y vuelve a iniciar sesión." : "";
+      if (allowed) load();
     });
 
     buildCards();

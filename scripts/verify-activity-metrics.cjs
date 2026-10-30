@@ -27,6 +27,10 @@ async function account(email) {
     const reset=await fetch(`http://127.0.0.1:8080/emulator/v1/projects/${project}/databases/(default)/documents`,{method:'DELETE'});
     assert.ok(reset.ok,'Dedicated disposable metrics project reset failed');
     const owner=await account('metrics.owner@example.test'),peer=await account('metrics.peer@example.test');
+    const adminAuth=req('firebase-admin/auth').getAuth(app);
+    await adminAuth.setCustomUserClaims(owner.localId,{orgAnalytics:true});
+    owner.idToken=(await account('metrics.owner@example.test')).idToken;
+
     const call=async(name,data={},who=owner,expected=200)=>{
       const r=await post(`${base}/${name}`,{data},who?.idToken);
       assert.equal(r.status,expected,`${name}: ${JSON.stringify(r.body)}`);

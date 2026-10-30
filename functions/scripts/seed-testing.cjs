@@ -60,6 +60,53 @@ async function seed() {
         status: 'PROPOSED', createdAt: FieldValue.serverTimestamp()});
     }
   }
+  await seedCreationAttempts();
+  await seedComparisonConfirmation();
+}
+
+// bq7 test data: attempts of the new activity form, some finished and some abandoned in different steps
+// they have test: true, so the dashboard shows the test data label, and fixed ids, so seeding again does not add more
+async function seedCreationAttempts() {
+  const attempts = [
+    {flow: 'seed-bq7-1', steps: [1, 2, 3, 4, 5, 6], finished: true, entry: 'dashboard'},
+    {flow: 'seed-bq7-2', steps: [2, 1, 3, 4, 5, 6], finished: true, entry: 'group'},
+    {flow: 'seed-bq7-3', steps: [1, 2], finished: false, entry: 'dashboard'},
+    {flow: 'seed-bq7-4', steps: [2, 1], finished: false, entry: 'group'},
+    {flow: 'seed-bq7-5', steps: [1, 2, 3, 4], finished: false, entry: 'slot'},
+    {flow: 'seed-bq7-6', steps: [], finished: false, entry: 'schedule'},
+    {flow: 'seed-bq7-7', steps: [1, 2, 3, 4, 5, 6], finished: false, entry: 'dashboard'},
+  ];
+  const names = ['opened', 'details', 'group', 'duration', 'date_time', 'place', 'review'];
+  const batch = db.batch();
+  for (const {flow, steps, finished, entry} of attempts) {
+    const event = (suffix, name, params) => batch.set(db.doc(`analyticsEvents/${flow}-${suffix}`),
+        {name, params: {flow_id: flow, ...params}, user_hash: null, test: true, created_at: FieldValue.serverTimestamp()});
+    event('start', 'creation_started', {entry_point: entry});
+    steps.forEach((index) => event(`step-${index}`, 'creation_step_viewed', {step_name: names[index], step_index: index}));
+    if (finished) event('end', 'creation_finished', {total_ms: 45000});
+  }
+  await batch.commit();
+}
+
+// bq9 test data: activities created from Compare Availability and without it, some of them confirmed
+// they have test: true and fixed ids, like the bq7 attempts
+async function seedComparisonConfirmation() {
+  const activities = [
+    {id: 'seed-bq9-1', source: 'suggested_slot', confirmed: true},
+    {id: 'seed-bq9-2', source: 'suggested_slot', confirmed: true},
+    {id: 'seed-bq9-3', source: 'suggested_slot', confirmed: false},
+    {id: 'seed-bq9-4', source: 'group_activity', confirmed: true},
+    {id: 'seed-bq9-5', source: 'group_activity', confirmed: false},
+    {id: 'seed-bq9-6', source: 'group_activity', confirmed: false},
+  ];
+  const batch = db.batch();
+  for (const {id, source, confirmed} of activities) {
+    const event = (suffix, name, params) => batch.set(db.doc(`analyticsEvents/${id}-${suffix}`),
+        {name, params: {activity_id: id, ...params}, user_hash: null, test: true, created_at: FieldValue.serverTimestamp()});
+    event('created', 'activity_created', {source, category: 'Study', group_size: 4});
+    if (confirmed) event('confirmed', 'activity_confirmed', {category: 'Study', group_size: 4});
+  }
+  await batch.commit();
 }
 
 async function verify() {

@@ -33,9 +33,11 @@ tests/                     Security rules tests (Firestore emulator)
 | `prepareProposalComparison`, `getCoordinationInsight` | Authenticated callables | Validates comparison evidence and reads the shared BQ9 aggregate. Code deployed; new-service invoker IAM remains blocked |
 | `refreshTeamInsights`, `refreshTeamInsightsNightly` | Callable / daily 4:30 AM Bogotá | Existing team pipeline: BQ1/BQ8 plus BQ5/BQ9 aggregates from the same Firestore database |
 | `resetRsvpOnNewActivity` | New `activities` document | Empties `goingIds` and `maybeIds` of the activity's group, so every invitation starts with no answers (BQ5) |
+| `refreshReminderTimingInsight` | Every day, 4:30 AM Bogotá | Runs `sql/bq6_reminder_response_timing.sql` and writes response rates by 30/60/120-minute RSVP reminder delay to `insights/bq6_reminder_timing`. |
 | `dispatchPendingReminders` | Every five minutes | Converts due in-app reminders into alert events, records `sentAt`, and increments the participant reminder count for BQ6/BQ14 |
 | `joinDemoGroupsOnSignUp` | New Firebase Auth account | Adds the account to the demo groups so a new user can RSVP and create activities immediately. Remove it once the apps can create and join groups |
 
+BQ1, BQ2, BQ4 and BQ7-BQ14 are implemented as BigQuery **scheduled queries** over the Analytics export, feeding the Looker Studio dashboard. BQ3 remains backed by authoritative Firestore recommendation records. BQ5 and BQ6 use scheduled Functions to run their BigQuery queries and publish feedback documents for the apps.
 The SQL files are reference queries, not evidence of deployed BigQuery scheduled queries. The verified shared dashboard is https://parchapp-ee6cc.web.app and currently displays BQ1/BQ3/BQ8; its BQ9 card is still pending. BQ3 remains backed by authoritative Firestore recommendation records. BQ9's aggregate exists in Firestore, with zero mature activities at the last check.
 
 The shared [Activity API contract](docs/activity-api.md) includes Java/Flutter

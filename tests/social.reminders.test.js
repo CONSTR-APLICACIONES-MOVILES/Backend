@@ -64,7 +64,7 @@ function requestFor(strategy){
   }throw new Error('Policy fixture unavailable');
 }
 async function publish(strategy,extra={}){
-  return call('publishActivity',{requestId:requestFor(strategy),groupId:'g',startTime:'2026-10-30T20:00:00Z',endTime:'2026-10-30T21:00:00Z',timeZone:'America/Bogota',fields:{title:'BQ14 QA',status:'PROPOSED'},...extra});
+  return call('publishActivity',{measurementVersion:1,requestId:requestFor(strategy),groupId:'g',startTime:'2026-10-30T20:00:00Z',endTime:'2026-10-30T21:00:00Z',timeZone:'America/Bogota',fields:{title:'BQ14 QA',status:'PROPOSED'},...extra});
 }
 test('two frozen RSVP strategies, concurrent dispatch, one delivery per recipient and activity-level aggregation',async()=>{
   const a=await publish('single_after_30_min'),b=await publish('single_after_60_min');
@@ -87,4 +87,19 @@ test('responses/cancellation/confirmation before due suppress reminders; initial
   assert.equal((await db.doc(`inboxes/b/items/${b.activityId}/reminders/initial`).get()).exists,false);
   const result=await refreshReminderInsight(db,new Date('2026-11-01T15:00:00Z'));
   assert.ok(result.by_strategy_size.some(r=>r.initially_confirmed===1&&r.notifications===0));
+});
+
+test('operational response estimates expose only predictions applicable to member groups, never dashboard aggregates',async()=>{
+  await db.doc('insights/bq5_response_time').set({invitations:999,secret:'organization',by_group_size:[
+    {group_size:2,estimate_minutes:15,estimate_kind:'all_responded',responses:100},
+    {group_size:8,estimate_minutes:90,estimate_kind:'per_response',responses:1000}]});
+  assert.deepEqual(await call('getResponseTimeEstimates'),{by_group_size:[{group_size:2,estimate_minutes:15,estimate_kind:'all_responded'}]});
+  assert.deepEqual(await call('getResponseTimeEstimates',{},'outsider'),{by_group_size:[]});
+  await assert.rejects(call('getCoordinationInsight'),{code:'permission-denied'});
+});
+
+test('Java receives the BQ3 badge decision without the organization aggregate',async()=>{
+  assert.deepEqual(await call('getRecommendedSlotPosition'),{position:1});
+  await db.doc('insights/bq3_slot_acceptance').set({recommended_position:3,by_position:[{private:'aggregate'}]});
+  assert.deepEqual(await call('getRecommendedSlotPosition'),{position:3});
 });
