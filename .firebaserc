@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "demo-parchapp"
+    "default": "demo-parchapp",
+    "live": "parchapp-ee6cc"
   }
 }

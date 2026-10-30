@@ -9,6 +9,8 @@ const {MobileService} = require('../functions/src/mobileService');
 const {createMobileCallables} = require('../functions/src/mobileCallables');
 const {ActivityRepository} = require('../functions/src/activityRepository');
 const {ActivityService} = require('../functions/src/activityService');
+const {chooseRsvpReminderDelay} = require('../functions/src/reminderTiming');
+const {dispatchPendingReminders} = require('../functions/src/reminderService');
 // Dedicated database: never clears the user's demo-parchapp fixtures.
 const project = 'demo-parchapp-phase-b';
 let app, db, mobile, api, activities, now;
@@ -52,6 +54,57 @@ test('comparison -> publish -> invitation -> RSVP -> details preserves the selec
   assert.deepEqual(summary.attendance, {accepted: 1, maybe: 1, declined: 0, pending: 0, total: 2});
   const group = (await db.doc('groups/g1').get()).data();
   assert.deepEqual(group.goingIds, ['other']); assert.deepEqual(group.maybeIds, ['member']);
+});
+
+test('new RSVP reminders use the BQ6 recommended delay and arrive before the activity', async () => {
+  await db.doc('insights/bq6_reminder_timing').set({recommended_delay_minutes: 30, recommendation_ready: true});
+  const created = await call('publishActivity', publication({
+    startTime: slot.startTime, endTime: slot.endTime, timeZone: slot.timeZone,
+  }));
+  const reminderRef = db.doc(`inboxes/member/items/${created.activityId}/reminders/initial`);
+  const reminder = (await reminderRef.get()).data();
+  const expectedDelay = chooseRsvpReminderDelay(created.activityId, 'member', 30, 120);
+
+  assert.equal(reminder.delayMinutes, expectedDelay);
+  assert.equal(reminder.strategy, `rsvp_after_${expectedDelay}_min`);
+  assert.equal(reminder.status, 'SCHEDULED');
+  assert.ok(reminder.scheduledAt.toDate() < new Date(slot.startTime));
+});
+
+test('dispatch records one delivered RSVP reminder with BQ6 metadata for Alerts', async () => {
+  const activityId = 'bq6-reminder-activity';
+  await db.doc(`activities/${activityId}`).set({
+    groupId: 'g1', title: 'Reminder test', createdBy: 'organizer',
+    participantIds: ['member', 'organizer'], cancelled: false,
+    createdAt: now, startTime: new Date(now.getTime() + 60 * 60_000),
+    date: '2026-10-20', time: '14:00', location: 'Library',
+  });
+  await db.doc(`inboxes/member/items/${activityId}`).set({
+    activityId, groupId: 'g1', invitedAt: now, response: null, reminderCount: 0,
+  });
+  const reminderRef = db.doc(`inboxes/member/items/${activityId}/reminders/initial`);
+  await reminderRef.set({
+    activityId, purpose: 'rsvp', strategy: 'rsvp_after_30_min', sequence: 1,
+    delayMinutes: 30, scheduledAt: new Date(now.getTime() - 60_000), status: 'SCHEDULED',
+  });
+
+  assert.deepEqual(await dispatchPendingReminders(db, {clock: () => now}),
+    {checked: 1, dispatched: 1, cancelled: 0});
+  const sent = (await reminderRef.get()).data();
+  assert.equal(sent.status, 'SENT');
+  assert.equal(sent.sentAt.toDate().getTime(), now.getTime());
+  const alerts = await mobile.getAlerts('member');
+  const reminderAlert = alerts.alerts.find(alert => alert.kind === 'reminder'
+    && alert.studySessionId === activityId);
+  assert.equal(reminderAlert.reminderPurpose, 'rsvp');
+  assert.equal(reminderAlert.reminderId, `reminder-${activityId}-1`);
+  assert.equal(reminderAlert.strategy, 'rsvp_after_30_min');
+  assert.equal(reminderAlert.delayMinutes, 30);
+  assert.equal(reminderAlert.sentAt, now.toISOString());
+
+  assert.deepEqual(await dispatchPendingReminders(db, {clock: () => now}),
+    {checked: 0, dispatched: 0, cancelled: 0});
+  assert.equal((await db.doc(`inboxes/member/items/${activityId}`).get()).data().reminderCount, 1);
 });
 
 test('publication retries and concurrent double submits return one stable ID', async () => {

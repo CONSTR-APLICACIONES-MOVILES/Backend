@@ -3,7 +3,7 @@ const {ServiceError} = require("./errors");
 
 const INPUT_FIELDS = {
   getActivity: ["activityId"],
-  getActivityRecommendations: ["activityId", "date", "durationMinutes", "minimumNoticeMinutes", "limit", "candidates"],
+  getActivityRecommendations: ["activityId", "date", "durationMinutes", "minimumNoticeMinutes", "limit"],
   presentActivityRecommendations: ["activityId", "recommendationIds"],
   acceptActivityRecommendation: ["activityId", "recommendationId"],
   modifyActivityRecommendation: ["activityId", "recommendationId", "startTime", "endTime"],

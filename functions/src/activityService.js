@@ -3,6 +3,7 @@ const {requireThat, documentId} = require("./errors");
 const {AvailabilityEngine, ContextAwareSlotRankingStrategy, normalizeContext, recommendationSlots,
   localDate, dayStart, isAvailable, hasSchedule, MINUTE, TIME_ZONE} = require("./availability");
 const {buildRecommendationInsight} = require("./insights");
+const {readActivityLocation} = require('./activityLocation');
 
 function iso(value) {
   if (!value) return null;
@@ -30,38 +31,6 @@ function parseInstant(value, name) {
   requireThat(new Date(`${calendarDate}T00:00:00Z`).toISOString().slice(0, 10) === calendarDate &&
       Number(value.slice(11, 13)) < 24, "invalid-argument", `${name} must contain a valid calendar date and hour.`);
   return new Date(value);
-}
-
-// bq3: the slots shown in compare availability, in the same order the organizer saw them
-// the app only sends the times, the backend counts who is free in each one, so the app can not fake it
-// accepting a slot later still checks availability and minimum notice
-const MAX_CANDIDATES = 10;
-function candidateSlots(candidates, context) {
-  requireThat(Array.isArray(candidates) && candidates.length > 0 && candidates.length <= MAX_CANDIDATES,
-      "invalid-argument", `Supply 1 to ${MAX_CANDIDATES} candidates.`);
-  const midnight = dayStart(context.date);
-  const seen = new Set();
-  return candidates.map((candidate, index) => {
-    requireThat(candidate && typeof candidate === "object" && !Array.isArray(candidate) &&
-        Object.keys(candidate).every((key) => key === "startTime" || key === "endTime"),
-    "invalid-argument", "Each candidate has only startTime and endTime.");
-    const start = parseInstant(candidate.startTime, `candidates[${index}].startTime`);
-    const end = parseInstant(candidate.endTime, `candidates[${index}].endTime`);
-    const startMinute = (start.getTime() - midnight) / MINUTE;
-    const endMinute = (end.getTime() - midnight) / MINUTE;
-    requireThat(startMinute >= 0 && startMinute < endMinute && endMinute <= 1440,
-        "invalid-argument", "Candidates must be inside the requested day.");
-    const key = `${start.toISOString()}|${end.toISOString()}`;
-    requireThat(!seen.has(key), "invalid-argument", "Candidates must be distinct.");
-    seen.add(key);
-    return {
-      startTime: start.toISOString(), endTime: end.toISOString(),
-      availableParticipants: context.members.filter((member) => isAvailable(member, startMinute, endMinute)).length,
-      totalParticipants: context.members.length,
-      score: null,
-      reasons: ["Shown in Compare Availability"],
-    };
-  });
 }
 
 class ActivityService {
@@ -97,7 +66,7 @@ class ActivityService {
         title: activity.title, description: activity.description ?? "", category: activity.category,
         date: activity.date ?? "", time: activity.time ?? "", startTime, endTime,
         durationMinutes: activity.durationMinutes ?? null, timeZone: TIME_ZONE,
-        status: activity.status, location: activity.location ?? "",
+        status: activity.status, location: activity.location ?? "", locationDetails:readActivityLocation(activity),
         reminderMinutesBefore: activity.reminderMinutesBefore ?? null,
         participants: group.members.filter(member => !activity.participantIds || activity.participantIds.includes(member.id)).map((member) => ({
           id: member.id, name: member.name, initials: member.initials ?? "",
@@ -120,10 +89,7 @@ class ActivityService {
         ...input, durationMinutes: input.durationMinutes ?? activity.durationMinutes,
       }, group.members, now);
       const batchId = randomUUID();
-// bq3: when the app sends the slots the organizer saw, we keep its order so the positions are the ones of the app
-      const slots = input.candidates === undefined
-        ? recommendationSlots(context, this.engine, this.ranker)
-        : candidateSlots(input.candidates, context);
+      const slots = recommendationSlots(context, this.engine, this.ranker);
       const recommendations = slots.map((slot, position) => {
         const id = randomUUID();
         const record = {

@@ -140,6 +140,22 @@ Each entry in `by_group_size`: `group_size`, `invitations`, `completed`, `pct_co
 
 If the document is missing or can't be read, clients show no estimate.
 
+## `insights/bq6_reminder_timing`
+
+`refreshReminderTimingInsight` updates this document daily from BQ6 Analytics events. New scheduled invitations use the published delay for most participants and keep a small deterministic exploration cohort on the other supported delays, so the comparison continues to learn without sending extra reminders.
+
+| Field | Type | Notes |
+|---|---|---|
+| `recommended_delay_minutes` | number | Delay after invitation before the single RSVP reminder; supported arms are 30, 60 and 120 minutes; defaults to 60 until a delay has enough data |
+| `recommended_strategy` | string | Strategy name corresponding to the selected delay |
+| `recommendation_ready` | boolean | True after at least 20 delivered RSVP reminders and one response exist for a delay |
+| `sample_size` | number | Delivered RSVP reminders in the 30-day window |
+| `min_reminders_per_delay` | number | Minimum denominator required to select a delay |
+| `by_delay` | array | Per delay: `delay_minutes`, `reminders`, `responses_after_reminder`, `response_rate_pct`, `avg_response_minutes` |
+| `updated_at` | timestamp | |
+
+If the document is unavailable or no arm has enough data, new invitations use the 60-minute default. If the activity starts within 30 minutes, no RSVP reminder is scheduled.
+
 ## Activity inbox and reminders
 
 `inboxes/{uid}/items/{activityId}` is the backend-owned per-participant response record.
@@ -150,7 +166,7 @@ when the invitation is created; it never contains calendar titles or locations.
 
 Scheduled in-app reminders live at
 `inboxes/{uid}/items/{activityId}/reminders/{reminderId}`. They contain `strategy`,
-`sequence`, `scheduledAt`, `sentAt`, `deliveredAt`, `openedAt`, `respondedAt` and
+`sequence`, `delayMinutes`, `scheduledAt`, `sentAt`, `deliveredAt`, `openedAt`, `respondedAt` and
 `status` (`SCHEDULED`, `SENT`, `OPENED`, `RESPONDED`, `EXPIRED` or `CANCELLED`).
 The `dispatchPendingReminders` function marks due reminders as sent and creates an
 in-app alert. A response cancels the reminder on the next dispatch pass.
@@ -177,8 +193,8 @@ recommendation IDs do not establish a BQ3 denominator.
 | `activity_create_attempt` | `creation_session_id`, `source`, `group_size` | BQ2 |
 | `activity_create_result` | `creation_session_id`, `result`, `duration_ms`, optional `error_code`, `activity_id` | BQ2 |
 | `invitation_sent` | `activity_id`, `availability_at_invitation` | BQ4 |
-| `reminder_sent` | `activity_id`, `strategy`, `sequence`, `delay_minutes` | BQ6/BQ14 |
-| `response_after_reminder` | `activity_id`, `strategy`, `sequence`, `response_delay_ms` | BQ6/BQ14 |
+| `reminder_sent` | `activity_id`, `reminder_id`, `reminder_purpose`, `strategy`, `sequence`, `delay_minutes`, `reminder_sent_at_ms` | BQ6/BQ14 |
+| `response_after_reminder` | `activity_id`, `reminder_id`, `strategy`, `sequence`, `delay_minutes`, `response_delay_ms`, `response_at_ms` | BQ6/BQ14 |
 | `creation_step_viewed` | `creation_session_id`, `step` | BQ7 |
 | `creation_step_completed` | `creation_session_id`, `step` | BQ7 |
 | `creation_abandoned` | `creation_session_id`, `last_step`, `duration_ms` | BQ7 |

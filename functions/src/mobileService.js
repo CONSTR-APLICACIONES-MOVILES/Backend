@@ -6,6 +6,7 @@ const {CommunityService, canShare, effectiveStatus, defaults} = require('./commu
 
 const {ExpansionService} = require('./expansionService');
 const {additionalAlerts} = require('./alertEvents');
+const {prepareProposalComparison} = require('./coordinationInsights');
 
 const DAY = 1440 * MINUTE;
 function validDate(value) {
@@ -55,6 +56,11 @@ class MobileService {
   }
 
   validatePlanningSlot(uid, input) { return this.lifecycle.validatePlanningSlot(uid, input); }
+  prepareProposalComparison(uid, input) { return prepareProposalComparison(this.db, uid, input, this.clock()); }
+  async getCoordinationInsight() {
+    const doc = await this.db.doc('insights/bq9_comparison_confirmation').get();
+    return {insight:doc.exists ? doc.data() : null};
+  }
   publishActivity(uid, input) { return this.lifecycle.publishActivity(uid, input); }
   updateActivityDetails(uid, input) { return this.lifecycle.mutate(uid, input, false); }
   cancelActivity(uid, input) { return this.lifecycle.mutate(uid, input, true); }
