@@ -52,7 +52,7 @@
 </head>
 <body>
   <header>
-    <h1>ParchApp · Team Dashboard</h1>
+    <h1>ParchApp - Team Dashboard</h1>
     <span class="spacer"></span>
     <span class="who" id="who"></span>
     <button class="primary" id="refresh" hidden>Refresh</button>
@@ -147,7 +147,7 @@
           const finishedPct = Math.round(1000 * data.total_finished / data.total_flows) / 10;
           return {
             number: data.most_abandoned_step ? (STEP_NAMES[data.most_abandoned_step] || data.most_abandoned_step) : "None",
-            detail: `${data.abandon_rate}% abandoned · ${data.total_flows} attempts · ${finishedPct}% finished`,
+            detail: `${data.abandon_rate}% abandoned - ${data.total_flows} ${data.total_flows === 1 ? "attempt" : "attempts"} - ${finishedPct}% finished`,
             chart: {
               labels: steps.map((step) => STEP_NAMES[step.name] || step.name),
               datasets: [{label: "% of attempts abandoned here", data: steps.map((step) => step.percent),
@@ -166,7 +166,7 @@
           const withoutCompare = data.groups.find((row) => row.usage === "without_comparison");
           return {
             number: `${data.comparison_rate}%`,
-            detail: `of ${data.total_activities} activities used Compare · ${withCompare.confirmation_pct}% confirmed with it, ${withoutCompare.confirmation_pct}% without`,
+            detail: `of ${data.total_activities} activities used Compare - ${withCompare.confirmation_pct}% confirmed with it, ${withoutCompare.confirmation_pct}% without`,
             chart: {
               labels: ["With Compare", "Without Compare"],
               datasets: [
@@ -215,7 +215,7 @@
       $(`${q.id}-empty`).hidden = ready;
       $(`${q.id}-empty`).textContent = q.empty;
       $(`${q.id}-chart`).parentElement.hidden = !ready;
-      $(`${q.id}-updated`).textContent = data ? `${when(data.updated_at)} · ${data.total_events ?? data.sample_size ?? 0} events` : "Not updated yet";
+      $(`${q.id}-updated`).textContent = data ? `${when(data.updated_at)} - ${data.total_events ?? data.sample_size ?? 0} events` : "Not updated yet";
       charts[q.id]?.destroy();
       if (!ready) {
         $(`${q.id}-number`).innerHTML = "—";
@@ -247,7 +247,7 @@
           $(`${q.id}-empty`).textContent = `Could not read this question: ${error.message}`;
         }
       }));
-      $("status").textContent = `Last read ${new Date().toLocaleTimeString()}${useEmulators ? " · local emulators" : ""}`;
+      $("status").textContent = `Last read ${new Date().toLocaleTimeString()}${useEmulators ? " - local emulators" : ""}`;
     }
 
 // the refresh button asks the backend to count the events again and then reads the cards
@@ -257,7 +257,7 @@
       try {
         const result = await httpsCallable(functions, "refreshTeamInsights")();
         await load();
-        $("status").textContent += ` · ${result.data.total_events} events counted`;
+        $("status").textContent += ` - ${result.data.total_events} events counted`;
       } catch (error) {
         $("status").textContent = `Refresh failed: ${error.message}`;
       } finally {
