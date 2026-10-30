@@ -1,4 +1,7 @@
-/* BQ2 (Type 1): activity creation reliability.
+/* LEGACY Analytics-export diagnostic, not the active BQ2 pipeline.
+   Canonical BQ2: creationAttempts -> activityInsights.js -> insights/bq2_creation_reliability.
+   Legacy duration > 8000 is a slow response, not proof of a timeout.
+   BQ2 (Type 1): activity creation reliability.
    Every client creation flow must emit one attempt and one result with the same session ID. */
 WITH attempts AS (
   SELECT

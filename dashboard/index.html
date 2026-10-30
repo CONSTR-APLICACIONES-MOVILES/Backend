@@ -30,7 +30,7 @@
     button:disabled { opacity: .5; cursor: default; }
     main { max-width: 1200px; margin: 0 auto; padding: 24px 16px; }
     .status { margin: 0 0 16px; color: var(--slate); font-size: 14px; min-height: 20px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 16px; }
     .card { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
     .card .top { display: flex; gap: 8px; align-items: center; }
     .badge { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--primary-light); color: var(--primary); }
@@ -42,6 +42,9 @@
     .chart { position: relative; height: 220px; }
     .empty { background: var(--warning-light); color: var(--warning); border-radius: 12px; padding: 12px; font-size: 14px; }
     .updated { color: var(--slate); font-size: 12px; margin-top: auto; }
+    .metrics { font-size: 13px; color: var(--slate); white-space: pre-line; line-height: 1.6; }
+    .segments { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .segments th, .segments td { padding: 6px 4px; border-bottom: 1px solid var(--line); text-align: left; overflow-wrap: anywhere; }
     .login { max-width: 380px; margin: 60px auto; background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 12px; }
     .login h2 { margin: 0; }
     .login p { margin: 0; color: var(--slate); font-size: 14px; }
@@ -52,7 +55,7 @@
 </head>
 <body>
   <header>
-    <h1>ParchApp - Team Dashboard</h1>
+    <h1>ParchApp · Team Dashboard</h1>
     <span class="spacer"></span>
     <span class="who" id="who"></span>
     <button class="primary" id="refresh" hidden>Refresh</button>
@@ -68,8 +71,8 @@
     <button class="primary" type="submit">Sign in</button>
   </form>
 
+  <p class="status" id="status" role="status"></p>
   <main id="dashboard" hidden>
-    <p class="status" id="status"></p>
     <div class="grid" id="cards"></div>
   </main>
 
@@ -105,6 +108,65 @@
 
 // one entry per business question, to add bq7 later copy one entry and change the document and the render
     const QUESTIONS = [
+      {
+        id:"bq14",owner:"Equipo de analítica",type:"Reminder strategies",doc:"bq14_reminder_effectiveness",
+        question:"¿Qué estrategia de recordatorios confirma antes con menos avisos, según el tamaño del grupo?",
+        hasData:data=>data.total>0,
+        empty:"Sin actividades instrumentadas para comparar estrategias. No hay un ganador demostrado.",
+        render:data=>({
+          number:`${data.mature_activities}`,detail:"actividades maduras comparables",
+          metrics:`Canal: in-app. Ventana: 24 h desde invitación. Pendientes: ${data.pending} · Proyección desconocida: ${data.unknown}.\nSolo cohortes instrumentadas con política RSVP; históricos sin política quedan fuera.\nLa confirmación es estado de actividad, no consenso RSVP. Comparación observacional, sin afirmar causalidad.\n${data.decisions.map(d=>`${d.size}: ${d.strategy?reminderLabel(d.strategy):'evidencia insuficiente / sin mejora conjunta'}`).join('\n')}`,
+          table:{headers:["Tamaño / estrategia","n / confirmación","Mediana / p95 min","Avisos / actividad"],
+            rows:data.by_strategy_size.map(r=>[`${r.size} · ${reminderLabel(r.strategy)}`,`${r.activities} / ${r.confirmation_rate}%`,`${r.median_minutes??'—'} / ${r.p95_minutes??'—'}`,r.notifications_per_activity.toFixed(2)])},
+          chart:{labels:data.by_strategy_size.map(r=>`${r.size} · ${reminderLabel(r.strategy)}`),datasets:[{label:"Confirmación %",data:data.by_strategy_size.map(r=>r.confirmation_rate),backgroundColor:"#10B981"}]},
+        }),
+      },
+      {
+        id: "bq2", type: "Type 1", owner: "Equipo de analítica", doc: "bq2_creation_reliability",
+        question: "¿Qué porcentaje de solicitudes de creación falla o termina en timeout?",
+        hasData: data => data.attempts > 0,
+        empty: "Sin intentos instrumentados en los últimos 30 días. No se calcula una tasa con denominador vacío.",
+        render: data => ({
+          number: `${data.failure_or_timeout_pct}%`,
+          detail: `${data.failure + data.timeout} fallos/timeouts de ${data.attempts} intentos`,
+          metrics: `Éxito: ${data.success} · Fallo: ${data.failure} · Timeout: ${data.timeout} · Sin resolver: ${data.unresolved}\nCobertura: ${data.coverage_pct}% · p95: ${data.p95_duration_ms ?? '—'} ms\nPublicaciones lógicas: ${data.logical_publications} · Timeout con éxito posterior: ${data.reconciled_success}\nDeadline cliente: 8 s. Se conservan los timeouts aunque el servidor confirme después.\nCobertura Flutter instrumentado; Java heredado y observaciones todavía locales no están incluidos.`,
+          chart: {labels: ["Éxito", "Fallo", "Timeout", "Sin resolver"],
+            datasets: [{label: "Intentos", data: [data.success,data.failure,data.timeout,data.unresolved], backgroundColor: ["#10B981","#DC2626","#D97706","#64748B"]}]},
+        }),
+      },
+      {
+        id: "bq13", type: "Type 5", owner: "Equipo de analítica", doc: "bq13_recommendation_confirmation",
+        question: "¿Qué horarios recomendados logran mayor tasa de confirmación en grupos similares?",
+        hasData: data => data.opportunities > 0,
+        empty: "Sin recomendaciones presentadas en los últimos 30 días. Se conserva el ranking base.",
+        render: data => ({
+          number: data.confirmation_rate === null ? "—" : `${data.confirmation_rate}%`,
+          detail: `${data.confirmed} confirmaciones atribuibles / ${data.mature_opportunities} oportunidades maduras`,
+          metrics: `Ventana de observación: 24 h desde la primera exposición del lote.\nPendientes: ${data.pending} · Históricos sin atribución: ${data.unknown} · Cobertura: ${data.coverage_pct}%\nSolo la sugerencia elegida sin cambios recibe la primera confirmación. Aceptar no es confirmar.\nRanking histórico desde 20 oportunidades por segmento y agregado de menos de 48 h; de lo contrario, ranking base.\nConfirmación es estado CONFIRMED de la actividad, no consenso RSVP.`,
+          table: {headers: ["Grupo / categoría", "Día / franja", "Muestra", "Confirmación"],
+            rows: data.by_segment.map(row => [`${row.size} · ${row.category}`, `${["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"][row.weekday]} · ${row.bucket}`, row.opportunities, `${row.confirmation_rate}%`])},
+          chart: {labels: data.by_segment.map(row => `${row.size} · ${row.bucket} · día ${row.weekday}`),
+            datasets: [{label: "Confirmación %", data: data.by_segment.map(row => row.confirmation_rate), backgroundColor: "#003D9B"}]},
+        }),
+      },
+      {
+        id: "bq3", type: "Type 2", doc: "bq3_slot_acceptance",
+        question: "What percentage of presented recommendations are accepted without changes?",
+        hasData: (data) => data.sample_size > 0,
+        empty: "No presented recommendations in the current window. The base ranking remains active.",
+        render: (data) => ({
+          number: `${data.pct_unchanged_overall}%`,
+          detail: `${data.accepted_recommendations_unchanged} unchanged / ${data.sample_size} presented`,
+          metrics: `Modified: ${data.modified ?? '—'} · Not selected: ${data.not_selected ?? '—'} · Undecided: ${data.undecided ?? '—'}\nThe denominator includes all unique exposed candidates, not only decisions.`,
+          chart: {
+            labels: data.by_position.map((row) => `Position ${row.slot_position + 1}`),
+            datasets: [
+              {label: "Presented", data: data.by_position.map((row) => row.presented), backgroundColor: "#93C5FD"},
+              {label: "Accepted unchanged", data: data.by_position.map((row) => row.accepted_unchanged), backgroundColor: "#003D9B"},
+            ],
+          },
+        }),
+      },
       {
         id: "bq1", type: "Type 1", doc: "bq1_engine_latency",
         question: "How long does the availability engine take on average for each group size?",
@@ -147,7 +209,7 @@
           const finishedPct = Math.round(1000 * data.total_finished / data.total_flows) / 10;
           return {
             number: data.most_abandoned_step ? (STEP_NAMES[data.most_abandoned_step] || data.most_abandoned_step) : "None",
-            detail: `${data.abandon_rate}% abandoned - ${data.total_flows} ${data.total_flows === 1 ? "attempt" : "attempts"} - ${finishedPct}% finished`,
+            detail: `${data.abandon_rate}% abandoned · ${data.total_flows} attempts · ${finishedPct}% finished`,
             chart: {
               labels: steps.map((step) => STEP_NAMES[step.name] || step.name),
               datasets: [{label: "% of attempts abandoned here", data: steps.map((step) => step.percent),
@@ -166,7 +228,7 @@
           const withoutCompare = data.groups.find((row) => row.usage === "without_comparison");
           return {
             number: `${data.comparison_rate}%`,
-            detail: `of ${data.total_activities} activities used Compare - ${withCompare.confirmation_pct}% confirmed with it, ${withoutCompare.confirmation_pct}% without`,
+            detail: `of ${data.total_activities} activities used Compare · ${withCompare.confirmation_pct}% confirmed with it, ${withoutCompare.confirmation_pct}% without`,
             chart: {
               labels: ["With Compare", "Without Compare"],
               datasets: [
@@ -177,7 +239,10 @@
           };
         },
       },
-    ];
+    ].sort((a,b) => {
+      const order = ["bq2","bq13","bq14","bq3","bq1","bq8","bq7","bq9"];
+      return order.indexOf(a.id)-order.indexOf(b.id);
+    });
 // bq7: names of the steps of the new activity form, in the order of the form
     const STEP_NAMES = {
       opened: "Opened", details: "Details", group: "Group", duration: "Duration",
@@ -201,8 +266,11 @@
         <article class="card" id="card-${q.id}">
           <div class="top"><span class="badge">${q.id.toUpperCase()}</span><span class="badge type">${q.type}</span><span class="badge test" id="${q.id}-test" hidden>Test data</span></div>
           <h2>${q.question}</h2>
+          ${q.owner ? `<p class="who">${q.owner}</p>` : ""}
           <div class="big" id="${q.id}-number">…</div>
           <div class="empty" id="${q.id}-empty" hidden></div>
+          <div class="metrics" id="${q.id}-metrics"></div>
+          <table class="segments" id="${q.id}-table" hidden></table>
           <div class="chart"><canvas id="${q.id}-chart"></canvas></div>
           <div class="updated" id="${q.id}-updated"></div>
         </article>`).join("");
@@ -211,18 +279,34 @@
     function show(q, data) {
       const ready = data && q.hasData(data);
 // the test data label shows when some of the numbers come from the seed of the emulators
-      $(`${q.id}-test`).hidden = !(data && data.test_flows > 0);
+      $(`${q.id}-test`).hidden = !(data && (useEmulators || data.test_flows > 0 || data.environment === "test"));
       $(`${q.id}-empty`).hidden = ready;
       $(`${q.id}-empty`).textContent = q.empty;
       $(`${q.id}-chart`).parentElement.hidden = !ready;
-      $(`${q.id}-updated`).textContent = data ? `${when(data.updated_at)} - ${data.total_events ?? data.sample_size ?? 0} events` : "Not updated yet";
+      const range = data?.window_start && data?.window_end ? ` · ${dateLabel(data.window_start)} – ${dateLabel(data.window_end)}` : "";
+      $(`${q.id}-updated`).textContent = data ? `${when(data.updated_at || data.updatedAt)} · ${useEmulators ? "test" : data.environment || "production"}${range}` : "Agregado todavía no publicado";
+      $(`${q.id}-metrics`).textContent = "";
+      $(`${q.id}-table`).hidden = true;
       charts[q.id]?.destroy();
       if (!ready) {
         $(`${q.id}-number`).innerHTML = "—";
         return;
       }
       const view = q.render(data);
-      $(`${q.id}-number`).innerHTML = `${view.number} <small>${view.detail}</small>`;
+      const number = $(`${q.id}-number`);
+      number.textContent = `${view.number} `;
+      const detail = document.createElement("small"); detail.textContent = view.detail; number.append(detail);
+      $(`${q.id}-metrics`).textContent = view.metrics || "";
+      if (view.table?.rows.length) {
+        const table = $(`${q.id}-table`); table.replaceChildren(); table.hidden = false;
+        for (const [index,row] of [view.table.headers,...view.table.rows].entries()) {
+          const tr = document.createElement("tr");
+          for (const value of row) { const cell = document.createElement(index === 0 ? "th" : "td"); cell.textContent = value; tr.append(cell); }
+          table.append(tr);
+        }
+      }
+      $(`${q.id}-chart`).parentElement.hidden = !view.chart?.labels.length;
+      if (!view.chart?.labels.length) return;
       charts[q.id] = new Chart($(`${q.id}-chart`), {
         type: "bar",
         data: view.chart,
@@ -235,10 +319,23 @@
       });
     }
 
+    function dateLabel(value) {
+      const date = value?.toDate ? value.toDate() : new Date(value);
+      return date.toLocaleDateString("es-CO", {timeZone:"America/Bogota"});
+    }
+    function reminderLabel(strategy) {
+      return {single_after_30_min:"30 min",single_after_60_min:"60 min"}[strategy] || strategy;
+    }
+
 // reads every insight document, one missing document only empties its card
     async function load() {
       $("status").textContent = "Loading…";
       await Promise.all(QUESTIONS.map(async (q) => {
+        if (q.phase) {
+          show(q, null);
+          $(`${q.id}-updated`).textContent = "Sin métrica publicada todavía";
+          return;
+        }
         try {
           const snapshot = await getDoc(doc(db, "insights", q.doc));
           show(q, snapshot.exists() ? snapshot.data() : null);
@@ -247,7 +344,7 @@
           $(`${q.id}-empty`).textContent = `Could not read this question: ${error.message}`;
         }
       }));
-      $("status").textContent = `Last read ${new Date().toLocaleTimeString()}${useEmulators ? " - local emulators" : ""}`;
+      $("status").textContent = `Last read ${new Date().toLocaleTimeString()}${useEmulators ? " · local emulators" : ""}`;
     }
 
 // the refresh button asks the backend to count the events again and then reads the cards
@@ -255,9 +352,14 @@
       $("refresh").disabled = true;
       $("status").textContent = "Counting the events…";
       try {
-        const result = await httpsCallable(functions, "refreshTeamInsights")();
+        const results = await Promise.allSettled([
+          httpsCallable(functions, "refreshTeamInsights")(),
+          httpsCallable(functions, "refreshActivityInsights")(),
+        ]);
         await load();
-        $("status").textContent += ` - ${result.data.total_events} events counted`;
+        const errors = results.flatMap((result,index) => result.status === "rejected" ?
+          [`${index === 0 ? "Team" : "BQ2/BQ3/BQ13"}: ${result.reason.message}`] : []);
+        $("status").textContent += errors.length ? ` · ${errors.join(" · ")}` : " · Aggregates refreshed";
       } catch (error) {
         $("status").textContent = `Refresh failed: ${error.message}`;
       } finally {
@@ -277,14 +379,21 @@
 
     $("sign-out").addEventListener("click", () => signOut(auth));
 
-// the dashboard only shows after the user signs in, the rules only let signed in users read insights
-    onAuthStateChanged(auth, (user) => {
+// A Firebase session alone does not grant organization analytics access.
+    onAuthStateChanged(auth, async (user) => {
+      $("dashboard").hidden = true;
+      $("refresh").hidden = true;
+      let allowed = false;
+      try { allowed = user ? (await user.getIdTokenResult()).claims.orgAnalytics === true : false; }
+      catch { $("status").textContent = "No se pudo verificar el acceso de la organización. Inicia sesión otra vez."; }
+      if (auth.currentUser?.uid !== user?.uid) return;
       $("login").hidden = !!user;
-      $("dashboard").hidden = !user;
-      $("refresh").hidden = !user;
+      $("dashboard").hidden = !allowed;
+      $("refresh").hidden = !allowed;
       $("sign-out").hidden = !user;
       $("who").textContent = user ? user.email : "";
-      if (user) load();
+      $("status").textContent = user && !allowed ? "Esta cuenta no tiene acceso al dashboard de la organización. Solicita el permiso orgAnalytics al administrador y vuelve a iniciar sesión." : "";
+      if (allowed) load();
     });
 
     buildCards();

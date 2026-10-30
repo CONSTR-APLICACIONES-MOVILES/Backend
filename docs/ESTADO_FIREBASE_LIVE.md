@@ -27,7 +27,7 @@ Los dos primeros endpoints están accesibles y requieren autenticación; esto no
 
 ## Auditoría autenticada posterior (cuenta confirmada por el integrante)
 
-El acceso con `gabriel.ropinto@gmail.com` ya funciona. El fallo anterior correspondía a otra sesión y no representa el estado actual. Se consultaron las apps y funciones con `--account` explícito.
+El acceso con `<FIREBASE_ACCOUNT>` ya funciona. El fallo anterior correspondía a otra sesión y no representa el estado actual. Se consultaron las apps y funciones con `--account` explícito.
 
 - 49 funciones activas; región `us-central1`, consistente con el cliente. Inventario resumido en `firebase-live-functions.json`.
 - Registro Android confirmado con app ID `1:718308941728:android:117a10f675ea5500998ec5`, paquete `com.example.parchapp`. La configuración Android, Dart y metadatos FlutterFire corresponden a ese registro.
@@ -44,7 +44,7 @@ El acceso con `gabriel.ropinto@gmail.com` ya funciona. El fallo anterior corresp
 Auditoría reproducible de configuración, sin documentos de usuarios:
 
 ```powershell
-node scripts/audit-live.cjs gabriel.ropinto@gmail.com
+node scripts/audit-live.cjs "$env:FIREBASE_ACCOUNT"
 ```
 
 Resultado resumido en `firebase-live-audit.json`; usa credenciales solo en memoria y no las imprime. El inventario de funciones es una instantánea que debe actualizarse tras despliegues.
@@ -60,3 +60,5 @@ Actualización posterior: ver `INTEGRACION_ANALITICA_SPRINT3.md`. El integrante 
 5. Compilar y probar el APK final en teléfono físico. Web/iOS/macOS siguen pendientes de configuración del proyecto nuevo.
 
 No afirmar que una cuenta de facturación activa acredita acceso, despliegue o integración. La captura confirma la identidad del proyecto, no esos estados.
+
+Los scripts administrativos leen la cuenta desde `FIREBASE_ACCOUNT`. En PowerShell, configura `$env:FIREBASE_ACCOUNT = "cuenta@empresa.com"` con la cuenta autorizada antes de ejecutarlos.

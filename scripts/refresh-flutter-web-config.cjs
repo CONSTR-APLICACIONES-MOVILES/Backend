@@ -2,7 +2,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 async function main(){
   const auth=require('firebase-tools/lib/auth');
-  const a=auth.findAccountByEmail('gabriel.ropinto@gmail.com');
+  const a=auth.findAccountByEmail(process.env.FIREBASE_ACCOUNT || (() => { throw new Error('Set FIREBASE_ACCOUNT to the Firebase account email.'); })());
   const {access_token}=await auth.getAccessToken(a.tokens.refresh_token,a.tokens.scopes);
   const headers={Authorization:`Bearer ${access_token}`};
   const appId='1:718308941728:web:abbff5e172d045a7998ec5';

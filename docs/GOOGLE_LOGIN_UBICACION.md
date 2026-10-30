@@ -33,7 +33,7 @@ Comandos utilizados desde el directorio Backend:
 
 ```powershell
 node scripts/configure-google-mobile.cjs --apply
-.\node_modules\.bin\firebase.cmd deploy --only functions:getActivity,functions:publishActivity,functions:updateActivityDetails --project parchapp-ee6cc --account gabriel.ropinto@gmail.com
+.\node_modules\.bin\firebase.cmd deploy --only functions:getActivity,functions:publishActivity,functions:updateActivityDetails --project parchapp-ee6cc --account "$env:FIREBASE_ACCOUNT"
 ```
 
 El script conserva certificados existentes y escribe la clave únicamente en `android/maps.properties`, ignorado por Git. No imprime claves ni tokens. Revisar `docs/google-mobile-configuration.json`, en particular `oauthCertificatePresent`, y recompilar el APK después de la configuración.

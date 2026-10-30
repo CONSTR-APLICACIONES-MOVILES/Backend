@@ -17,6 +17,7 @@ const {ActivityRepository} = require("./src/activityRepository");
 const {ActivityService} = require("./src/activityService");
 const {createActivityCallables} = require("./src/activityCallables");
 const {dispatchPendingReminders} = require("./src/reminderService");
+const {requireOrganizationAnalytics} = require('./src/organizationAccess');
 
 initializeApp();
 
@@ -30,25 +31,22 @@ const {MobileService} = require("./src/mobileService");
 const {createMobileCallables} = require("./src/mobileCallables");
 Object.assign(exports, createMobileCallables(new MobileService(getFirestore())));
 
+// Extends the same Firestore insights collection without replacing the team's
+// deployed BQ1/7/8/9 aggregator or its historical metric definitions.
+exports.refreshActivityInsights = onCall({region:'us-central1'}, async request => {
+  requireOrganizationAnalytics(request);
+  if (Object.keys(request.data || {}).length) throw new HttpsError('invalid-argument','No arguments accepted.');
+  return require('./src/activityInsights').refreshActivityInsights(getFirestore());
+});
+
 /* BQ3 feedback loop: use server records, including displayed but unselected slots.
  * The shared service/repository instance is the analytics facade for both clients.
  */
 exports.refreshSlotRecommendation = onSchedule(
     {schedule: "every day 04:00", timeZone: "America/Bogota", region: "us-central1"},
     async () => {
-      const until = new Date();
-      const since = new Date(until.getTime() - 30 * 24 * 60 * 60 * 1000);
-      const insight = buildRecommendationInsight(await activityRepository.presentedSince(since, until));
-      await getFirestore().doc("insights/bq3_slot_acceptance").set({
-        ...insight,
-        window_start: since,
-        window_end: until,
-        updated_at: FieldValue.serverTimestamp(),
-      });
-      logger.info("BQ3 insight updated", {
-        recommended_position: insight.recommended_position,
-        sample_size: insight.sample_size,
-      });
+      const result = await require('./src/activityInsights').refreshActivityInsights(getFirestore());
+      logger.info('BQ2/BQ3/BQ13 insights updated', result);
     });
 
 exports.refreshResponseTimeInsight = onSchedule(
@@ -84,7 +82,7 @@ exports.refreshTeamInsightsNightly = onSchedule(
     async () => refreshTeamInsights(getFirestore()));
 
 exports.refreshTeamInsights = onCall({region:'us-central1'}, async request => {
-  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in to continue.');
+  requireOrganizationAnalytics(request);
   return refreshTeamInsights(getFirestore());
 });
 
@@ -114,7 +112,7 @@ exports.dispatchPendingReminders = onSchedule(
     {schedule: "every 5 minutes", timeZone: "America/Bogota", region: "us-central1"},
     async () => {
       const result = await dispatchPendingReminders(getFirestore());
-      logger.info("Pending reminders dispatched", result);
+      logger.info('Pending reminders dispatched', result);
     });
 
 // Legacy samples are local-only. Real signups must not acquire memberships.

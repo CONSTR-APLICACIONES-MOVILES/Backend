@@ -144,7 +144,7 @@ test('new callable contracts enforce authentication and reject unexpected fields
   const db=setup(), api=createMobileCallables(new MobileService(db,{clock:() => now}));
   await assert.rejects(api.getCoordinationInsight.run({data:{}}),{code:'unauthenticated'});
   await assert.rejects(api.prepareProposalComparison.run({auth:{uid:'owner'},data:{...proposal,uid:'peer'}}),{code:'invalid-argument'});
-  assert.deepEqual(await api.getCoordinationInsight.run({auth:{uid:'owner'},data:{}}),{insight:null});
+  assert.deepEqual(await api.getCoordinationInsight.run({auth:{uid:'owner',token:{orgAnalytics:true}},data:{}}),{insight:null});
   const response=await api.prepareProposalComparison.run({auth:{uid:'owner'},data:proposal}); assert.ok(response.comparisonEvidenceId);
 });
 test('BQ5 server acknowledgements deduplicate responders and account for organizer not being invited', () => {

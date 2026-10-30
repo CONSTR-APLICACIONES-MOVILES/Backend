@@ -12,3 +12,7 @@ firebase-export-*/
 google-services.json
 GoogleService-Info.plist
 service-account*.json
+
+# Isolated local metrics emulator configuration
+/firebase.development.local.json
+/firebase.integration.local.json

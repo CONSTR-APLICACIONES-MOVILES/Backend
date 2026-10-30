@@ -4,7 +4,7 @@ async function main() {
   const email = process.argv.find(a => a.startsWith('--email='))?.slice(8);
   if (!email) throw Error('Supply --email=<account>');
   const auth = require('firebase-tools/lib/auth');
-  const account = auth.findAccountByEmail('gabriel.ropinto@gmail.com');
+  const account = auth.findAccountByEmail(process.env.FIREBASE_ACCOUNT || (() => { throw new Error('Set FIREBASE_ACCOUNT to the Firebase account email.'); })());
   const {access_token} = await auth.getAccessToken(account.tokens.refresh_token, account.tokens.scopes);
   const project = 'parchapp-ee6cc';
   async function request(url, method = 'GET', body) {

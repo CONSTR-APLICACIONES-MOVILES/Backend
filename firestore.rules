@@ -126,16 +126,27 @@ service cloud.firestore {
           && request.resource.data.created_at == request.time;
     }
 
+    // BQ2 observations are validated and deduplicated by recordCreationAttempt.
+    match /creationAttempts/{attemptId} {
+      allow read, write: if false;
+    }
+    // Public-minimal DTOs and relationship commands are served through callables.
+    match /usernames/{name} { allow read, write: if false; }
+    match /publicPeople/{uid} { allow read, write: if false; }
+    match /friendships/{pairId} { allow read, write: if false; }
+    match /reminderMeasurements/{activityId} { allow read, write: if false; }
+    match /reminderDeliveries/{deliveryId} { allow read, write: if false; }
+
     // Reference data written by the seed script: where activities can happen, with coordinates.
     match /campusAreas/{areaId} {
       allow read: if signedIn();
       allow write: if false;
     }
 
-    // Written by the scheduled BQ3 function; read by both apps (feature F2, "Recommended" slot).
-    // the team dashboard also reads it after the user signs in, only the functions write it
+    // Aggregates belong to the organization dashboard. Apps receive operational
+    // recommendations through authenticated callables, not raw dashboard data.
     match /insights/{insightId} {
-      allow read: if signedIn();
+      allow read: if signedIn() && request.auth.token.orgAnalytics == true;
       allow write: if false;
     }
   }

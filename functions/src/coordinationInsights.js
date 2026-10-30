@@ -97,7 +97,10 @@ async function recordFirstConfirmation(db, activityId, before, after, eventTime)
     const firstConfirmedAt = candidate && (!previous || candidate < previous) ? candidate : previous;
     const createdAt = asDate(old?.createdAt) || asDate(after.createdAt);
     if (!createdAt) return;
+    const earliest = candidate && (!previous || candidate <= previous);
+    const confirmationRecommendation = earliest ? require('./activityInsights').confirmationAttribution(after) : old?.confirmationRecommendation || null;
     tx.set(ref, {schemaVersion:1, activityId, createdAt, firstConfirmedAt,
+      confirmationRecommendation,
       comparisonUsed:old?.comparisonUsed ?? null, environment:old?.environment || 'production'}, {merge:true});
   });
 }

@@ -8,7 +8,7 @@ const targets = ['getCoordinationInsight','prepareProposalComparison','validateP
   'refreshTeamInsights','refreshTeamInsightsNightly'];
 async function main() {
   const auth = require('firebase-tools/lib/auth');
-  const account = auth.findAccountByEmail('gabriel.ropinto@gmail.com');
+  const account = auth.findAccountByEmail(process.env.FIREBASE_ACCOUNT || (() => { throw new Error('Set FIREBASE_ACCOUNT to the Firebase account email.'); })());
   if (!account) throw new Error('Expected Firebase CLI account is not logged in.');
   const {access_token} = await auth.getAccessToken(account.tokens.refresh_token,account.tokens.scopes);
   async function request(url,method='GET',body) {

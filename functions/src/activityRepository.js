@@ -31,8 +31,9 @@ class ActivityRepository {
       const activityResponses = Object.fromEntries((group?.members || []).map((m, i) =>
         [m.id, responseDocs[i].data()?.response || null]));
       const recommendations = this.db.collection("slotRecommendations");
+      const confirmationInsight = (await transaction.get(this.db.doc('insights/bq13_recommendation_confirmation'))).data();
       return work({
-        activity, group, activityResponses,
+        activity, group, activityResponses, confirmationInsight,
         version: activity ? `${activityDoc.updateTime.seconds}:${activityDoc.updateTime.nanoseconds}` : null,
         getRecommendations: async (ids) => {
           const docs = await transaction.getAll(...ids.map((id) => recommendations.doc(id)));

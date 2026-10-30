@@ -19,7 +19,7 @@ const group = {
     busy: [], preferredStart: 600, preferredEnd: 720})),
 };
 const call = (name, data = {}, uid = "organizer") => api[name].run({
-  data: {activityId, ...data}, auth: uid ? {uid} : undefined,
+  data: {activityId, ...data}, auth: uid ? {uid,token:{orgAnalytics:name === "getActivityRecommendationAnalytics"}} : undefined,
 });
 const generate = (options = {}) => call("getActivityRecommendations", {durationMinutes: 60, limit: 3, ...options});
 const present = (result) => call("presentActivityRecommendations", {
@@ -63,6 +63,7 @@ test("activity details work for members and legacy activities have explicit unkn
 
 test("callables enforce authentication, membership, organizer ownership and IDs", async () => {
   await assert.rejects(call("getActivity", {}, null), {code: "unauthenticated"});
+  await assert.rejects(api.getActivityRecommendationAnalytics.run({data:{activityId},auth:{uid:"organizer",token:{}}}),{code:"permission-denied"});
   await assert.rejects(call("getActivity", {}, "outsider"), {code: "permission-denied"});
   for (const name of ["getActivityRecommendations", "getActivityRecommendationAnalytics"]) {
     await assert.rejects(call(name, {}, "member"), {code: "permission-denied"});

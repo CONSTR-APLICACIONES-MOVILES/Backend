@@ -148,7 +148,7 @@ class ActivityLifecycle {
       }
       const group = (await tx.get(this.db.doc(`groups/${input.groupId}`))).data();
       requireThat(group?.memberIds?.includes(uid), 'permission-denied', 'Group membership is required.');
-      const reminderInsight = (await tx.get(this.db.doc('insights/bq6_reminder_timing'))).data();
+      const reminderTimingInsight = (await tx.get(this.db.doc('insights/bq6_reminder_timing'))).data();
       const ids = participants(input.participantIds, group, uid);
       const now = this.clock();
       const scheduled = input.startTime != null || input.endTime != null;
@@ -166,6 +166,10 @@ class ActivityLifecycle {
          availability = await availabilitySnapshot(this.db, tx, group, ids, slot, now, uid);
       }
       const attribution = await consumeComparison(this.db, tx, uid, input, ids, activityId, now, slot?.date);
+      // Versioned Flutter publications opt in to a frozen per-activity BQ14
+      // cohort. Legacy clients retain main's per-recipient BQ6 timing contract.
+      const reminderInsight = input.measurementVersion===1 && slot && ids.length>1 ? (await tx.get(this.db.doc('insights/bq14_reminder_effectiveness'))).data() : null;
+      const reminderPolicy = input.measurementVersion===1 && slot && ids.length>1 ? require('./reminderInsights').chooseReminderPolicy(activityId,ids.length,now,reminderInsight,require('./activityInsights').environment(this.db)) : null;
       const receipt = {activityId, created: true, scheduled,
         confirmed: fields.status === 'CONFIRMED', invitationCount: ids.filter(id => id !== uid).length,
         startTime: slot?.start.toISOString() ?? null, endTime: slot?.end.toISOString() ?? null,
@@ -186,6 +190,7 @@ class ActivityLifecycle {
         firstConfirmedAt:fields.status === 'CONFIRMED' ? now : null,
       });
       tx.create(this.db.doc(`activities/${activityId}`), {...fields, groupId: input.groupId,
+         ...(reminderPolicy?{reminderPolicy}:{}),
          createdBy: uid, createdAt: now, participantIds: ids, cancelled: false,
          planningContext,
          ...(slot ? {startTime: slot.start, endTime: slot.end, durationMinutes: slot.minutes,
@@ -195,6 +200,9 @@ class ActivityLifecycle {
          ...(input.comparisonId ? {planningComparisonId: input.comparisonId} : {})});
       lifecycleEvent(tx, this.db, activityId, 'CREATED', now, {groupId: input.groupId, actorId: uid});
       if (fields.status === 'CONFIRMED') lifecycleEvent(tx, this.db, activityId, 'CONFIRMED', now, {groupId: input.groupId, actorId: uid});
+      if(reminderPolicy)tx.create(this.db.doc(`reminderMeasurements/${activityId}`),{
+        ...reminderPolicy,activityId,invitedAt:now,environment:require('./activityInsights').environment(this.db),
+        initiallyConfirmed:fields.status==='CONFIRMED'});
       for (const participantId of ids.filter(id => id !== uid)) {
         tx.set(this.db.doc(`inboxes/${participantId}/items/${activityId}`), {
           activityId, groupId: input.groupId, invitedAt: now, response: null,
@@ -202,18 +210,21 @@ class ActivityLifecycle {
           reminderCount: 0, lastReminderAt: null, lastReminderStrategy: null,
           isRead: false,
         }, {merge: true});
-        if (slot) {
-          const minutesUntilStart = Math.floor((slot.start.getTime() - now.getTime()) / MINUTE);
-          const delayMinutes = chooseRsvpReminderDelay(activityId, participantId,
-              reminderInsight?.recommended_delay_minutes, minutesUntilStart);
-          if (delayMinutes != null) {
-            tx.set(this.db.doc(`inboxes/${participantId}/items/${activityId}/reminders/initial`), {
-              activityId, purpose: 'rsvp', strategy: `rsvp_after_${delayMinutes}_min`,
-              sequence: 1, delayMinutes,
-              scheduledAt: new Date(now.getTime() + delayMinutes * MINUTE), sentAt: null,
-              deliveredAt: null, openedAt: null, respondedAt: null, status: 'SCHEDULED',
-            }, {merge: true});
-          }
+        if (slot && reminderPolicy && fields.status!=='CONFIRMED') {
+          tx.set(this.db.doc(`inboxes/${participantId}/items/${activityId}/reminders/initial`), {
+            activityId, purpose: 'rsvp', strategy: reminderPolicy.strategy, sequence: 1,
+            scheduledAt: new Date(now.getTime() + reminderPolicy.delayMinutes * MINUTE), sentAt: null,
+            closesAt:new Date(Math.min(+slot.start,+now+86400000)),
+            deliveredAt: null, openedAt: null, respondedAt: null, status: 'SCHEDULED',
+          }, {merge: true});
+        } else if (slot && !reminderPolicy && fields.status!=='CONFIRMED') {
+          const delayMinutes = chooseRsvpReminderDelay(activityId,participantId,
+            reminderTimingInsight?.recommended_delay_minutes,Math.floor((+slot.start-+now)/MINUTE));
+          if(delayMinutes!=null)tx.set(this.db.doc(`inboxes/${participantId}/items/${activityId}/reminders/initial`),{
+            activityId,purpose:'rsvp',strategy:`rsvp_after_${delayMinutes}_min`,sequence:1,delayMinutes,
+            scheduledAt:new Date(+now+delayMinutes*MINUTE),sentAt:null,
+            deliveredAt:null,openedAt:null,respondedAt:null,status:'SCHEDULED',
+          },{merge:true});
         }
       }
       tx.create(commandRef, {fingerprint, receipt, createdAt: now});
@@ -252,6 +263,7 @@ class ActivityLifecycle {
       if (becameConfirmed && !measurement?.firstConfirmedAt) tx.set(measurementRef, {
         activityId:input.activityId, schemaVersion:1, createdAt:activity.createdAt || now,
         comparisonUsed:measurement?.comparisonUsed ?? null, firstConfirmedAt:now,
+        confirmationRecommendation:require('./activityInsights').confirmationAttribution(activity),
         environment:measurement?.environment || 'production',
       }, {merge:true});
       tx.update(ref, cancel ? {cancelled: true, cancelledAt: now, lastMutation: fingerprint}

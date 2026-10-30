@@ -10,4 +10,6 @@ export const firebaseConfig = {
 
 // on localhost the dashboard uses the local emulators, so it can be tested without the real project
 export const useEmulators = ["localhost", "127.0.0.1"].includes(location.hostname);
-export const emulatorProjectId = "demo-parchapp";
+const requestedDemo = new URLSearchParams(location.search).get('demoProject');
+export const emulatorProjectId = useEmulators && /^demo-[a-z0-9-]{1,40}$/.test(requestedDemo || '')
+  ? requestedDemo : "demo-parchapp";

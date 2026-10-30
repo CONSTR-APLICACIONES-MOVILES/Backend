@@ -16,7 +16,7 @@ const plan={project,androidPackage:'com.example.parchapp',registerCertificates:[
 async function main(){
   if(!process.argv.includes('--apply')){console.log(JSON.stringify(plan,null,2));return;}
   const auth=require('firebase-tools/lib/auth');
-  const account=auth.findAccountByEmail('gabriel.ropinto@gmail.com');
+  const account=auth.findAccountByEmail(process.env.FIREBASE_ACCOUNT || (() => { throw new Error('Set FIREBASE_ACCOUNT to the Firebase account email.'); })());
   const {access_token}=await auth.getAccessToken(account.tokens.refresh_token,account.tokens.scopes);
   async function request(url,method='GET',data,allow404=false){
     const r=await fetch(url,{method,headers:{Authorization:`Bearer ${access_token}`,'Content-Type':'application/json'},

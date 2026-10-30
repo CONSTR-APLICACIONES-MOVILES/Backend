@@ -124,8 +124,10 @@ test("only the organiser confirms or deletes an activity", async () => {
   await assertSucceeds(deleteDoc(doc(as("mateo"), "activities/a1")));
 });
 
-test("insights are read-only for signed-in users", async () => {
-  await assertSucceeds(getDoc(doc(as("stranger"), "insights/bq3_slot_acceptance")));
+test("organization insights require a trusted claim, even for signed-in users", async () => {
+  await assertFails(getDoc(doc(as("stranger"), "insights/bq3_slot_acceptance")));
+  await assertSucceeds(getDoc(doc(env.authenticatedContext("analyst", {orgAnalytics:true}).firestore(), "insights/bq3_slot_acceptance")));
+  await assertFails(setDoc(doc(env.authenticatedContext("analyst", {orgAnalytics:true}).firestore(), "insights/bq3_slot_acceptance"), {recommended_position:3}));
   await assertFails(getDoc(doc(anonymous(), "insights/bq3_slot_acceptance")));
   await assertFails(setDoc(doc(as("alex"), "insights/bq3_slot_acceptance"), {recommended_position: 3}));
 });

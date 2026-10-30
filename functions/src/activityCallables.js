@@ -1,5 +1,6 @@
 const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {ServiceError} = require("./errors");
+const {requireOrganizationAnalytics} = require('./organizationAccess');
 
 const INPUT_FIELDS = {
   getActivity: ["activityId"],
@@ -16,6 +17,7 @@ function createActivityCallables(service) {
     "acceptActivityRecommendation", "modifyActivityRecommendation", "getActivityRecommendationAnalytics",
   ].map((name) => [name, onCall({region: "us-central1"}, async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to continue.");
+    if (name === 'getActivityRecommendationAnalytics') requireOrganizationAnalytics(request);
     if (!request.data || typeof request.data !== "object" || Array.isArray(request.data)) {
       throw new HttpsError("invalid-argument", "Supply an object containing activityId.");
     }

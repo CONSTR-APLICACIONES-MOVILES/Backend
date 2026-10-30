@@ -1,4 +1,6 @@
-/* BQ13 (Type 5): recommendation position and confirmation outcome. */
+/* LEGACY selection diagnostic: this query measures acceptance, NOT confirmation.
+   Canonical BQ13: slotRecommendations + coordinationMeasurements confirmation snapshot
+   -> activityInsights.js -> insights/bq13_recommendation_confirmation. */
 WITH presented AS (
   SELECT
     (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'recommendation_id') AS recommendation_id,
