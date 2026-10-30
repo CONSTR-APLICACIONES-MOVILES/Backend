@@ -19,3 +19,7 @@ service-account*.json
 
 # Local deployment configuration; preserve the currently deployed parameter.
 /functions/.env.parchapp-ee6cc
+
+# Machine-specific Firebase settings
+/firebase.*.local.json
+/functions/.env.*
