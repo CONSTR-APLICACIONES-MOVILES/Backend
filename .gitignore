@@ -1,4 +1,5 @@
 node_modules/
+tmp/
 .scannerwork/
 .env.sonar
 build-projects-check.json

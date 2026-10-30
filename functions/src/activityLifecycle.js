@@ -4,6 +4,8 @@ const {requireThat, documentId, integer} = require('./errors');
 const {localDate, dayStart, MINUTE, hasSchedule, TIME_ZONE} = require('./availability');
 
 const {canShare} = require('./communityService');
+const {consumeComparison} = require('./coordinationInsights');
+const {validateActivityLocation} = require('./activityLocation');
 
 const canonical = value => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
 const hash = value => createHash('sha256').update(JSON.stringify(canonical(value))).digest('hex');
@@ -27,7 +29,7 @@ function interval(input, now) {
 function metadata(input) {
   const fields = input.fields;
   requireThat(fields && typeof fields === 'object' && !Array.isArray(fields) &&
-    Object.keys(fields).every(k => ['title', 'description', 'category', 'location', 'status', 'date', 'time'].includes(k)),
+    Object.keys(fields).every(k => ['title', 'description', 'category', 'location', 'locationDetails', 'status', 'date', 'time'].includes(k)),
   'invalid-argument', 'Unsupported activity fields.');
   const text = (key, max, fallback = '') => {
     const value = fields[key] ?? fallback;
@@ -40,6 +42,7 @@ function metadata(input) {
     status: text('status', 20, 'PROPOSED'), date: text('date', 50), time: text('time', 100)};
   requireThat(result.title && ['study', 'sports', 'social', 'other'].includes(result.category) &&
     ['PROPOSED', 'CONFIRMED'].includes(result.status), 'invalid-argument', 'Choose valid activity details.');
+  if (Object.hasOwn(fields,'locationDetails')) result.locationDetails=validateActivityLocation(fields.locationDetails,result.location);
   return result;
 }
 
@@ -99,7 +102,8 @@ class ActivityLifecycle {
     return this.db.runTransaction(async tx => {
       const query = this.db.collection('groups').where('memberIds', 'array-contains', uid);
       const groups = (await tx.get(query)).docs;
-      const peers = new Map(groups.flatMap(g => (g.data().members || []).map(m => [m.id, m])));
+      const peers = new Map(groups.flatMap(g => (g.data().members || [])
+        .filter(m => g.data().memberIds.includes(m.id)).map(m => [m.id, m])));
       requireThat(ids.every(id => id === uid || peers.has(id)), 'permission-denied', 'Compare shared group members only.');
       if (input.groupId) {
         documentId(input.groupId, 'groupId');
@@ -114,7 +118,13 @@ class ActivityLifecycle {
         groupId: input.groupId || null, sourceSlotId: String(input.sourceSlotId || '').slice(0, 200),
         generatedAt: now, expiresAt: new Date(now.getTime() + 5 * MINUTE)};
       tx.create(this.db.doc(`planningComparisons/${comparisonId}`), record);
-      return {...record, comparisonId, generatedAt: now.toISOString(), expiresAt: record.expiresAt.toISOString()};
+      // A validated slot is also evidence that this comparison actually completed on the server.
+      if (ids.length > 1) tx.create(this.db.doc(`coordinationComparisons/${comparisonId}`), {
+        uid, participantIds:ids, date:slot.date, groupId:input.groupId || null, source:'server',
+        createdAt:now, expiresAt:record.expiresAt, consumedBy:null,
+      });
+      return {...record, comparisonId, comparisonEvidenceId:ids.length > 1 ? comparisonId : null,
+        generatedAt: now.toISOString(), expiresAt: record.expiresAt.toISOString()};
     });
   }
 
@@ -153,6 +163,7 @@ class ActivityLifecycle {
         'failed-precondition', 'Comparison expired or changed. Compare again before publishing.');
          availability = await availabilitySnapshot(this.db, tx, group, ids, slot, now, uid);
       }
+      const attribution = await consumeComparison(this.db, tx, uid, input, ids, activityId, now, slot?.date);
       const receipt = {activityId, created: true, scheduled,
         confirmed: fields.status === 'CONFIRMED', invitationCount: ids.filter(id => id !== uid).length,
         startTime: slot?.start.toISOString() ?? null, endTime: slot?.end.toISOString() ?? null,
@@ -166,6 +177,12 @@ class ActivityLifecycle {
         locationAreaId: input.locationAreaId || 'unknown',
         timeBucket: displayStart == null ? 'unknown' : timeBucket(displayStart),
       };
+      if (attribution.evidenceRef) tx.update(attribution.evidenceRef, {consumedBy:activityId});
+      tx.create(this.db.doc(`coordinationMeasurements/${activityId}`), {
+        schemaVersion:1, activityId, createdAt:now, environment:'production',
+        comparisonUsed:attribution.comparisonUsed,
+        firstConfirmedAt:fields.status === 'CONFIRMED' ? now : null,
+      });
       tx.create(this.db.doc(`activities/${activityId}`), {...fields, groupId: input.groupId,
          createdBy: uid, createdAt: now, participantIds: ids, cancelled: false,
          planningContext,
@@ -208,7 +225,9 @@ class ActivityLifecycle {
       const group = (await tx.get(this.db.doc(`groups/${activity.groupId}`))).data();
       requireThat(activity.createdBy === uid && group?.memberIds.includes(uid),
         'permission-denied', 'Only the current organizer may change the activity.');
-      const stillMatches = fields && Object.entries(fields).every(([key, value]) => value === (activity[key] ?? ''));
+      if (fields && !Object.hasOwn(fields,'locationDetails') && fields.location !== activity.location && activity.locationDetails) fields.locationDetails=null;
+      const stillMatches = fields && Object.entries(fields).every(([key, value]) =>
+        value == null ? activity[key] == null : JSON.stringify(canonical(value)) === JSON.stringify(canonical(activity[key] ?? '')));
       if (activity.lastMutation === fingerprint && (cancel ? activity.cancelled : stillMatches && !activity.cancelled) || cancel && activity.cancelled) {
         return {activityId: input.activityId, cancelled: !!activity.cancelled, saved: true};
       }
@@ -220,6 +239,13 @@ class ActivityLifecycle {
       }
       const now = this.clock();
       const becameConfirmed = !cancel && fields.status === 'CONFIRMED' && activity.status !== 'CONFIRMED';
+      const measurementRef = this.db.doc(`coordinationMeasurements/${input.activityId}`);
+      const measurement = becameConfirmed ? (await tx.get(measurementRef)).data() : null;
+      if (becameConfirmed && !measurement?.firstConfirmedAt) tx.set(measurementRef, {
+        activityId:input.activityId, schemaVersion:1, createdAt:activity.createdAt || now,
+        comparisonUsed:measurement?.comparisonUsed ?? null, firstConfirmedAt:now,
+        environment:measurement?.environment || 'production',
+      }, {merge:true});
       tx.update(ref, cancel ? {cancelled: true, cancelledAt: now, lastMutation: fingerprint}
         : {...fields, ...(becameConfirmed ? {confirmedAt: now} : {}), lastMutation: fingerprint, updatedAt: now});
       lifecycleEvent(tx, this.db, input.activityId, cancel ? 'CANCELLED' : becameConfirmed ? 'CONFIRMED' : 'UPDATED', now,

@@ -7,7 +7,7 @@
     {
       "source": "functions",
       "codebase": "default",
-      "ignore": ["node_modules", ".git", "test", "scripts", "*.log"]
+      "ignore": ["node_modules", ".git", "test", "scripts", "tmp", "*.log"]
     }
   ],
   "emulators": {

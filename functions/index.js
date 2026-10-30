@@ -2,20 +2,20 @@ const {initializeApp} = require("firebase-admin/app");
 const {getFirestore, FieldValue} = require("firebase-admin/firestore");
 const {onSchedule} = require("firebase-functions/v2/scheduler");
 const {onDocumentCreated, onDocumentWritten} = require("firebase-functions/v2/firestore");
-const {defineString} = require("firebase-functions/params");
+const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const functionsV1 = require("firebase-functions/v1");
 const logger = require("firebase-functions/logger");
-const {BigQuery} = require("@google-cloud/bigquery");
 
 const {joinDemoGroups} = require("./src/groupMembership");
-const {loadQuery, buildRecommendationInsight, buildResponseTimeInsight} = require("./src/insights");
+const {buildRecommendationInsight} = require("./src/insights");
+const {refreshTeamInsights} = require('./src/teamInsights');
+const {refreshResponseTimeInsight} = require('./src/responseTimeInsights');
+const {refreshCoordinationInsight, recordFirstConfirmation} = require('./src/coordinationInsights');
 const {ActivityRepository} = require("./src/activityRepository");
 const {ActivityService} = require("./src/activityService");
 const {createActivityCallables} = require("./src/activityCallables");
 
 initializeApp();
-
-const analyticsDataset = defineString("ANALYTICS_DATASET");
 
 const activityRepository = new ActivityRepository(getFirestore());
 const activityService = new ActivityService(activityRepository);
@@ -48,21 +48,31 @@ exports.refreshSlotRecommendation = onSchedule(
 exports.refreshResponseTimeInsight = onSchedule(
     {schedule: "every day 04:15", timeZone: "America/Bogota", region: "us-central1"},
     async () => {
-      const projectId = process.env.GCLOUD_PROJECT;
-      const query = loadQuery("bq5_response_time.sql", projectId, analyticsDataset.value());
-      const [rows] = await new BigQuery().query({query});
-
-      const insight = buildResponseTimeInsight(rows);
-      await getFirestore().doc("insights/bq5_response_time").set({
-        ...insight,
-        updated_at: FieldValue.serverTimestamp(),
-      });
+      const insight = await refreshResponseTimeInsight(getFirestore());
       logger.info("BQ5 insight updated", {
         group_sizes: insight.by_group_size.length,
         invitations: insight.invitations,
         completed: insight.completed,
       });
     });
+
+exports.refreshTeamInsightsNightly = onSchedule(
+    {schedule:'every day 04:30', timeZone:'America/Bogota', region:'us-central1'},
+    async () => refreshTeamInsights(getFirestore()));
+
+exports.refreshTeamInsights = onCall({region:'us-central1'}, async request => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in to continue.');
+  return refreshTeamInsights(getFirestore());
+});
+
+exports.refreshCoordinationInsight = onSchedule(
+    {schedule:'every day 04:45', timeZone:'America/Bogota', region:'us-central1'},
+    async () => refreshCoordinationInsight(getFirestore()));
+
+exports.recordFirstActivityConfirmation = onDocumentWritten(
+    {document:'activities/{activityId}', region:'us-central1'},
+    async event => recordFirstConfirmation(getFirestore(), event.params.activityId,
+      event.data?.before.data(), event.data?.after.data(), event.data?.after.updateTime?.toDate()));
 
 exports.resetRsvpOnNewActivity = onDocumentCreated(
     {document: "activities/{activityId}", region: "us-central1"},
@@ -121,12 +131,11 @@ exports.dispatchPendingReminders = onSchedule(
       logger.info("Pending reminders dispatched", {checked: pending.size, dispatched});
     });
 
-/* Adds every new account to the demo groups, so a real user can RSVP, compare availability and create activities right after signing up. Remove when the apps can create and join groups.
- */
+// Legacy samples are local-only. Real signups must not acquire memberships.
 exports.joinDemoGroupsOnSignUp = functionsV1.auth.user().onCreate(async (user) => {
   const db = getFirestore();
-  await joinDemoGroups(db, user);
-  logger.info("New account joined the demo groups", {uid: user.uid});
+  const joined = await joinDemoGroups(db, user);
+  if (joined) logger.info("Local account joined sample groups", {uid: user.uid});
 });
 
 
