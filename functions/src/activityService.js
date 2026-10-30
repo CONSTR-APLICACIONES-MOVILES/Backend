@@ -3,6 +3,7 @@ const {requireThat, documentId} = require("./errors");
 const {AvailabilityEngine, ContextAwareSlotRankingStrategy, normalizeContext, recommendationSlots,
   localDate, dayStart, isAvailable, hasSchedule, MINUTE, TIME_ZONE} = require("./availability");
 const {buildRecommendationInsight} = require("./insights");
+const {readActivityLocation} = require('./activityLocation');
 
 function iso(value) {
   if (!value) return null;
@@ -65,7 +66,7 @@ class ActivityService {
         title: activity.title, description: activity.description ?? "", category: activity.category,
         date: activity.date ?? "", time: activity.time ?? "", startTime, endTime,
         durationMinutes: activity.durationMinutes ?? null, timeZone: TIME_ZONE,
-        status: activity.status, location: activity.location ?? "",
+        status: activity.status, location: activity.location ?? "", locationDetails:readActivityLocation(activity),
         reminderMinutesBefore: activity.reminderMinutesBefore ?? null,
         participants: group.members.filter(member => !activity.participantIds || activity.participantIds.includes(member.id)).map((member) => ({
           id: member.id, name: member.name, initials: member.initials ?? "",

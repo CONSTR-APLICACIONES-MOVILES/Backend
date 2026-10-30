@@ -1,6 +1,9 @@
 const {demoGroups, memberForAccount} = require("./demoData");
 
 async function joinDemoGroups(db, user, {emulator = process.env.FUNCTIONS_EMULATOR === "true"} = {}) {
+  // Production accounts start empty. Joining a group requires an explicit action.
+  // Keep legacy sample onboarding exclusively in the local emulator.
+  if (!emulator) return false;
   // Local test identities get exactly the two real-peer groups from seed:testing.
   // This bypass is never applied to production or ordinary account creation.
   if (emulator && user.uid.startsWith("local-test-")) return;
@@ -20,5 +23,6 @@ async function joinDemoGroups(db, user, {emulator = process.env.FUNCTIONS_EMULAT
       else tx.set(group.ref, {...data, ...membership});
     }
   });
+  return true;
 }
 module.exports = {joinDemoGroups};

@@ -1,6 +1,6 @@
 # ParchApp Backend
 
-Firebase backend shared by the ParchApp **Android (Java)** and **Flutter** apps. Firebase is the server side of the client-server architecture: Authentication for sign-in, Cloud Firestore for groups and activities, Firebase Analytics exported to BigQuery for the Business Questions, and Cloud Functions for the jobs the apps shouldn't do.
+Firebase backend shared by the ParchApp **Android (Java)** and **Flutter** apps. The verified live project is `parchapp-ee6cc`: Authentication, Firestore `(default)` and Functions in `us-central1`. The current analytics runtime aggregates server records in Firestore; a Firebase Analytics export to BigQuery has not been verified. See [live integration and limits](docs/INTEGRACION_ANALITICA_SPRINT3.md) and [block 0 handoff](docs/EMPALME_BLOQUE_0_A_1.md).
 
 ```
 firestore.rules            Who can read and write what (tested in tests/)
@@ -29,13 +29,16 @@ tests/                     Security rules tests (Firestore emulator)
 | `presentActivityRecommendations` | Organizer callable | Acknowledges the candidates actually displayed, once per ID |
 | `acceptActivityRecommendation`, `modifyActivityRecommendation` | Organizer callable | Atomically records a decision and updates the activity schedule |
 | `getActivityRecommendationAnalytics` | Organizer callable | Per-activity BQ3 counts and percentage |
-| `refreshResponseTimeInsight` | Every day, 4:15 AM Bogotá | Runs `sql/bq5_response_time.sql` and writes the expected time until everyone answers an invitation, per group size, to `insights/bq5_response_time`. The Active Groups card shows it. This is the BQ5 Type 2 feedback loop |
+| `refreshResponseTimeInsight` | Every day, 4:15 AM Bogotá | Aggregates server-acknowledged Firestore invitations and responses into `insights/bq5_response_time`; preserves the Flutter feedback contract without a placeholder dataset |
+| `prepareProposalComparison`, `getCoordinationInsight` | Authenticated callables | Validates comparison evidence and reads the shared BQ9 aggregate. Code deployed; new-service invoker IAM remains blocked |
+| `refreshTeamInsights`, `refreshTeamInsightsNightly` | Callable / daily 4:30 AM Bogotá | Existing team pipeline: BQ1/BQ8 plus BQ5/BQ9 aggregates from the same Firestore database |
 | `resetRsvpOnNewActivity` | New `activities` document | Empties `goingIds` and `maybeIds` of the activity's group, so every invitation starts with no answers (BQ5) |
 | `refreshReminderTimingInsight` | Every day, 4:30 AM Bogotá | Runs `sql/bq6_reminder_response_timing.sql` and writes response rates by 30/60/120-minute RSVP reminder delay to `insights/bq6_reminder_timing`. |
 | `dispatchPendingReminders` | Every five minutes | Converts due in-app reminders into alert events, records `sentAt`, and increments the participant reminder count for BQ6/BQ14 |
 | `joinDemoGroupsOnSignUp` | New Firebase Auth account | Adds the account to the demo groups so a new user can RSVP and create activities immediately. Remove it once the apps can create and join groups |
 
 BQ1, BQ2, BQ4 and BQ7-BQ14 are implemented as BigQuery **scheduled queries** over the Analytics export, feeding the Looker Studio dashboard. BQ3 remains backed by authoritative Firestore recommendation records. BQ5 and BQ6 use scheduled Functions to run their BigQuery queries and publish feedback documents for the apps.
+The SQL files are reference queries, not evidence of deployed BigQuery scheduled queries. The verified shared dashboard is https://parchapp-ee6cc.web.app and currently displays BQ1/BQ3/BQ8; its BQ9 card is still pending. BQ3 remains backed by authoritative Firestore recommendation records. BQ9's aggregate exists in Firestore, with zero mature activities at the last check.
 
 The shared [Activity API contract](docs/activity-api.md) includes Java/Flutter
 examples, scoring, retry behavior, and BQ3 semantics. The initial engine uses

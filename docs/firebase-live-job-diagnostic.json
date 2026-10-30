@@ -1,0 +1,16 @@
+{
+  "checkedAt": "2026-10-29T21:49:44.050Z",
+  "schedulerHttp": 200,
+  "jobs": [
+    {
+      "name": "projects/parchapp-ee6cc/locations/us-central1/jobs/firebase-schedule-refreshTeamInsightsNightly-us-central1",
+      "uri": "https://refreshteaminsightsnightly-dqkffki4yq-uc.a.run.app/",
+      "invoker": "718308941728-compute@developer.gserviceaccount.com",
+      "state": "ENABLED",
+      "lastAttempt": "2026-10-29T21:49:08.715634Z",
+      "status": {}
+    }
+  ],
+  "logHttp": 200,
+  "errors": []
+}
