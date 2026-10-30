@@ -113,6 +113,17 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // BQ2 observations are validated and deduplicated by recordCreationAttempt.
+    match /creationAttempts/{attemptId} {
+      allow read, write: if false;
+    }
+    // Public-minimal DTOs and relationship commands are served through callables.
+    match /usernames/{name} { allow read, write: if false; }
+    match /publicPeople/{uid} { allow read, write: if false; }
+    match /friendships/{pairId} { allow read, write: if false; }
+    match /reminderMeasurements/{activityId} { allow read, write: if false; }
+    match /reminderDeliveries/{deliveryId} { allow read, write: if false; }
+
     // Reference data written by the seed script: where activities can happen, with coordinates.
     match /campusAreas/{areaId} {
       allow read: if signedIn();

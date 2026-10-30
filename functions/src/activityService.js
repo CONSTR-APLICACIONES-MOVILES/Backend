@@ -4,6 +4,7 @@ const {AvailabilityEngine, ContextAwareSlotRankingStrategy, normalizeContext, re
   localDate, dayStart, isAvailable, hasSchedule, MINUTE, TIME_ZONE} = require("./availability");
 const {buildRecommendationInsight} = require("./insights");
 const {readActivityLocation} = require('./activityLocation');
+const {rankWithHistory, environment} = require('./activityInsights');
 
 function iso(value) {
   if (!value) return null;
@@ -82,18 +83,22 @@ class ActivityService {
   }
 
   getActivityRecommendations(uid, input) {
-    return this.withActivity(uid, input, true, ({activity, group, putRecommendation}) => {
+    return this.withActivity(uid, input, true, ({activity, group, putRecommendation, confirmationInsight}) => {
       requireThat(!activity.cancelled, "failed-precondition", "This activity is cancelled.");
       const now = this.clock();
       const context = normalizeContext({
         ...input, durationMinutes: input.durationMinutes ?? activity.durationMinutes,
       }, group.members, now);
       const batchId = randomUUID();
-      const slots = recommendationSlots(context, this.engine, this.ranker);
+      const ranker = {rank:(slots, ctx) => rankWithHistory(this.ranker.rank(slots,ctx),ctx,
+        confirmationInsight,activity.category,now,environment(this.repository.db || {}))};
+      const slots = recommendationSlots(context, this.engine, ranker);
       const recommendations = slots.map((slot, position) => {
         const id = randomUUID();
         const record = {
           ...slot, activityId: input.activityId, batchId, organizerId: uid, position,
+          schemaVersion:2, groupSize:group.members.length, category:activity.category || 'other',
+          environment:activity.analyticsEnvironment === 'test' ? 'test' : environment(this.repository.db || {}),
           participantIds: group.members.map((member) => member.id).sort(),
           minimumNoticeMinutes: context.minimumNoticeMinutes,
           generatedAt: now, presentedAt: null, outcome: null, decidedAt: null,
@@ -112,7 +117,7 @@ class ActivityService {
         input.recommendationIds.length <= 10 && new Set(input.recommendationIds).size === input.recommendationIds.length,
     "invalid-argument", "Supply 1 to 10 distinct recommendationIds actually displayed.");
     input.recommendationIds.forEach((id) => documentId(id, "recommendationId"));
-    return this.withActivity(uid, input, true, async ({getRecommendations, updateRecommendation}) => {
+    return this.withActivity(uid, input, true, async ({getRecommendations, getBatch, updateRecommendation}) => {
       const records = await getRecommendations(input.recommendationIds);
       records.forEach((record) => {
         requireThat(record?.activityId === input.activityId && record.organizerId === uid,
@@ -120,6 +125,12 @@ class ActivityService {
         requireThat(record.presentedAt || !record.decidedAt, "failed-precondition", "This recommendation batch is closed.");
       });
       const now = this.clock();
+      const batches = [];
+      for (const batchId of new Set(records.map(r=>r.batchId))) batches.push(await getBatch(batchId));
+      for (const batch of batches) {
+        const anchored = batch.find(r=>r.batchPresentedAt)?.batchPresentedAt;
+        if (!anchored) for (const candidate of batch) updateRecommendation(candidate.id,{batchPresentedAt:now});
+      }
       for (const record of records) {
         if (!record.presentedAt) updateRecommendation(record.id, {presentedAt: now});
       }
@@ -179,6 +190,8 @@ class ActivityService {
         });
       }
       context.updateActivity({
+        recommendationAttribution:{candidateId:record.id,batchId:record.batchId,
+          startTime, endTime, selectedAt:now, outcome},
         startTime: new Date(startTime), endTime: new Date(endTime), durationMinutes,
         date, time: `${String(Math.floor(start / 60)).padStart(2, "0")}:${String(start % 60).padStart(2, "0")}`,
       });

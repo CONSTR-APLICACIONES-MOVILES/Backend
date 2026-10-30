@@ -45,8 +45,12 @@ function buildSlotInsight(rows) {
 
 function buildRecommendationInsight(records) {
   const positions = new Map();
+  let modified = 0, notSelected = 0, undecided = 0;
   for (const record of records) {
     if (!record.presentedAt) continue;
+    if (record.outcome === 'MODIFIED') modified++;
+    else if (record.outcome === 'NOT_SELECTED') notSelected++;
+    else if (!record.outcome) undecided++;
     const row = positions.get(record.position) ?? {
       slot_position: record.position, presented: 0, accepted: 0, accepted_unchanged: 0,
     };
@@ -55,7 +59,8 @@ function buildRecommendationInsight(records) {
     if (record.outcome === "ACCEPTED_UNCHANGED") row.accepted_unchanged++;
     positions.set(record.position, row);
   }
-  return buildSlotInsight([...positions.values()].sort((a, b) => a.slot_position - b.slot_position));
+  return {...buildSlotInsight([...positions.values()].sort((a, b) => a.slot_position - b.slot_position)),
+    modified, not_selected:notSelected, undecided};
 }
 
 const MIN_COMPLETED = 3;

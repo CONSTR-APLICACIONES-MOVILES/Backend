@@ -1,4 +1,8 @@
-/* BQ14 (Type 5): reminder speed versus notification volume. */
+/* LEGACY Analytics-export diagnostic, not the active BQ14 definition.
+   Canonical: reminderMeasurements + reminderDeliveries + coordinationMeasurements
+   -> reminderInsights.js -> insights/bq14_reminder_effectiveness.
+   The canonical pipeline aggregates one activity, includes zero-alert cases and
+   uses first confirmation from invitation; personal organizer reminders excluded. */
 WITH reminders AS (
   SELECT
     (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'activity_id') AS activity_id,

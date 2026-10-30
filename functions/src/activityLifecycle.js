@@ -164,6 +164,8 @@ class ActivityLifecycle {
          availability = await availabilitySnapshot(this.db, tx, group, ids, slot, now, uid);
       }
       const attribution = await consumeComparison(this.db, tx, uid, input, ids, activityId, now, slot?.date);
+      const reminderInsight = slot && ids.length>1 ? (await tx.get(this.db.doc('insights/bq14_reminder_effectiveness'))).data() : null;
+      const reminderPolicy = slot && ids.length>1 ? require('./reminderInsights').chooseReminderPolicy(activityId,ids.length,now,reminderInsight,require('./activityInsights').environment(this.db)) : null;
       const receipt = {activityId, created: true, scheduled,
         confirmed: fields.status === 'CONFIRMED', invitationCount: ids.filter(id => id !== uid).length,
         startTime: slot?.start.toISOString() ?? null, endTime: slot?.end.toISOString() ?? null,
@@ -184,6 +186,7 @@ class ActivityLifecycle {
         firstConfirmedAt:fields.status === 'CONFIRMED' ? now : null,
       });
       tx.create(this.db.doc(`activities/${activityId}`), {...fields, groupId: input.groupId,
+         ...(reminderPolicy?{reminderPolicy}:{}),
          createdBy: uid, createdAt: now, participantIds: ids, cancelled: false,
          planningContext,
          ...(slot ? {startTime: slot.start, endTime: slot.end, durationMinutes: slot.minutes,
@@ -193,6 +196,9 @@ class ActivityLifecycle {
          ...(input.comparisonId ? {planningComparisonId: input.comparisonId} : {})});
       lifecycleEvent(tx, this.db, activityId, 'CREATED', now, {groupId: input.groupId, actorId: uid});
       if (fields.status === 'CONFIRMED') lifecycleEvent(tx, this.db, activityId, 'CONFIRMED', now, {groupId: input.groupId, actorId: uid});
+      if(reminderPolicy)tx.create(this.db.doc(`reminderMeasurements/${activityId}`),{
+        ...reminderPolicy,activityId,invitedAt:now,environment:require('./activityInsights').environment(this.db),
+        initiallyConfirmed:fields.status==='CONFIRMED'});
       for (const participantId of ids.filter(id => id !== uid)) {
         tx.set(this.db.doc(`inboxes/${participantId}/items/${activityId}`), {
           activityId, groupId: input.groupId, invitedAt: now, response: null,
@@ -200,10 +206,11 @@ class ActivityLifecycle {
           reminderCount: 0, lastReminderAt: null, lastReminderStrategy: null,
           isRead: false,
         }, {merge: true});
-        if (slot) {
+        if (slot && reminderPolicy && fields.status!=='CONFIRMED') {
           tx.set(this.db.doc(`inboxes/${participantId}/items/${activityId}/reminders/initial`), {
-            activityId, purpose: 'rsvp', strategy: 'single_after_60_min', sequence: 1,
-            scheduledAt: new Date(now.getTime() + 60 * MINUTE), sentAt: null,
+            activityId, purpose: 'rsvp', strategy: reminderPolicy.strategy, sequence: 1,
+            scheduledAt: new Date(now.getTime() + reminderPolicy.delayMinutes * MINUTE), sentAt: null,
+            closesAt:new Date(Math.min(+slot.start,+now+86400000)),
             deliveredAt: null, openedAt: null, respondedAt: null, status: 'SCHEDULED',
           }, {merge: true});
         }
@@ -244,6 +251,7 @@ class ActivityLifecycle {
       if (becameConfirmed && !measurement?.firstConfirmedAt) tx.set(measurementRef, {
         activityId:input.activityId, schemaVersion:1, createdAt:activity.createdAt || now,
         comparisonUsed:measurement?.comparisonUsed ?? null, firstConfirmedAt:now,
+        confirmationRecommendation:require('./activityInsights').confirmationAttribution(activity),
         environment:measurement?.environment || 'production',
       }, {merge:true});
       tx.update(ref, cancel ? {cancelled: true, cancelledAt: now, lastMutation: fingerprint}

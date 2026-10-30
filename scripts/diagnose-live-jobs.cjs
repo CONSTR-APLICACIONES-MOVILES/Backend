@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 async function main() {
   const auth = require('firebase-tools/lib/auth');
-  const account = auth.findAccountByEmail('gabriel.ropinto@gmail.com');
+  const account = auth.findAccountByEmail(process.env.FIREBASE_ACCOUNT || (() => { throw new Error('Set FIREBASE_ACCOUNT to the Firebase account email.'); })());
   const {access_token} = await auth.getAccessToken(account.tokens.refresh_token,account.tokens.scopes);
   const headers = {Authorization:`Bearer ${access_token}`,'Content-Type':'application/json'};
   const response = await fetch('https://cloudscheduler.googleapis.com/v1/projects/parchapp-ee6cc/locations/us-central1/jobs',{headers});

@@ -136,7 +136,10 @@ class ExpansionService {
       requireThat(group && group.ownerId === link.ownerId,'not-found','Group unavailable.');
       title = group.name; member = group.memberIds.includes(uid);
     } else if (link.kind === 'activity') title = (await activityContext(this.db,uid,link.entityId)).activity.title;
-    else title = (await this.getSharedProfile(uid,{userId:link.entityId})).name;
+    else {
+      const publicPerson=(await this.db.doc(`publicPeople/${link.entityId}`).get()).data();
+      title=publicPerson?.name || (await this.getSharedProfile(uid,{userId:link.entityId})).name;
+    }
     return {kind:link.kind, entityId:link.entityId, title, member, expiresAt:iso(link.expiresAt)};
   }
   async joinSharedGroup(uid,input) {

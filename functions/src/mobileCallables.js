@@ -1,6 +1,9 @@
 const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {ServiceError} = require("./errors");
 const FIELDS = {
+  setUsername:['username','clientUserId'], searchPeople:['query','cursor','limit'],getPublicPerson:['userId'],
+  getFriends:['cursor','limit'],changeFriendship:['userId','action','expectedVersion','clientUserId'],
+  recordCreationAttempt: ['attemptId','requestId','phase','startedAt','outcome','durationMs','errorCode','clientUserId'],
   getCoordinationInsight: [], prepareProposalComparison: ['date', 'friendIds'],
   discover: ['query','kind','category','cursor','limit'], getSharedProfile: ['userId'],
   getActivityMaterials: ['activityId'], saveActivityMaterials: ['activityId','expectedVersion','topics','resources','clientUserId'], setTopicCompletion: ['activityId','topicId','completed','clientUserId'],

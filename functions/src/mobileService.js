@@ -27,9 +27,15 @@ class MobileService {
     this.userLookup = userLookup || ((uid) => require("firebase-admin/auth").getAuth().getUser(uid));
     this.expansions = new ExpansionService(db, {clock, userLookup: this.userLookup});
     this.community = new CommunityService(db, {clock, userLookup: this.userLookup});
+    this.social = new (require('./socialService').SocialService)(db,{clock,userLookup:this.userLookup});
   }
 
   getCommunityPeers(uid, input) { return this.community.getCommunityPeers(uid, input); }
+  setUsername(uid,input){return this.social.setUsername(uid,input);}
+  searchPeople(uid,input){return this.social.searchPeople(uid,input);}
+  getPublicPerson(uid,input){return this.social.getPublicPerson(uid,input);}
+  getFriends(uid,input){return this.social.getFriends(uid,input);}
+  changeFriendship(uid,input){return this.social.changeFriendship(uid,input);}
   createGroup(uid, input) { return this.community.createGroup(uid, input); }
   getGroupInvitations(uid, input) { return this.community.getGroupInvitations(uid, input); }
   respondGroupInvitation(uid, input) { return this.community.respondGroupInvitation(uid, input); }
@@ -62,6 +68,7 @@ class MobileService {
     return {insight:doc.exists ? doc.data() : null};
   }
   publishActivity(uid, input) { return this.lifecycle.publishActivity(uid, input); }
+  recordCreationAttempt(uid, input) { return require('./activityInsights').recordCreationAttempt(this.db, uid, input, this.clock()); }
   updateActivityDetails(uid, input) { return this.lifecycle.mutate(uid, input, false); }
   cancelActivity(uid, input) { return this.lifecycle.mutate(uid, input, true); }
 
@@ -210,7 +217,10 @@ class MobileService {
     requireThat(groups.length < 450, "resource-exhausted", "Too many groups for one profile update.");
     await this.db.runTransaction(async (tx) => {
       const current = groups.length ? await tx.getAll(...groups.map((g) => g.ref)) : [];
+      const publicRef=this.db.doc(`publicPeople/${uid}`);
+      const publicPerson=fields.name!==undefined?(await tx.get(publicRef)).data():null;
       tx.set(this.db.doc(`profiles/${uid}`), {...fields, ...(fields.status !== undefined ? {statusExpiresAt: null} : {}), updatedAt: this.clock()}, {merge: true});
+      if(publicPerson)tx.update(publicRef,{name:fields.name.trim(),updatedAt:this.clock()});
       if (fields.name !== undefined) {
         const words = fields.name.trim().split(/\s+/);
         const initials = (words[0][0] + (words.length > 1 ? words[words.length - 1][0] : "")).toUpperCase();
