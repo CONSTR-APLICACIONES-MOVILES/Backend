@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ParchApp Team Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --primary: #003D9B;
+      --primary-light: #E8F0FE;
+      --success: #10B981;
+      --dark: #0F172A;
+      --slate: #64748B;
+      --line: #E2E8F0;
+      --card: #FFFFFF;
+      --page: #F6F8FC;
+      --warning: #B45309;
+      --warning-light: #FEF3C7;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--page); color: var(--dark); }
+    header { display: flex; align-items: center; gap: 12px; padding: 16px 24px; background: var(--card); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+    header h1 { font-size: 20px; margin: 0; color: var(--primary); }
+    header .spacer { flex: 1; }
+    header .who { color: var(--slate); font-size: 14px; }
+    button { font: inherit; font-weight: 600; border: 0; border-radius: 999px; padding: 10px 18px; cursor: pointer; }
+    button.primary { background: var(--primary); color: #fff; }
+    button.secondary { background: var(--primary-light); color: var(--primary); }
+    button:disabled { opacity: .5; cursor: default; }
+    main { max-width: 1200px; margin: 0 auto; padding: 24px 16px; }
+    .status { margin: 0 0 16px; color: var(--slate); font-size: 14px; min-height: 20px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+    .card .top { display: flex; gap: 8px; align-items: center; }
+    .badge { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--primary-light); color: var(--primary); }
+    .badge.type { background: #ECFDF5; color: #047857; }
+    .badge.test { background: var(--warning-light); color: var(--warning); }
+    .card h2 { font-size: 16px; margin: 0; line-height: 1.35; }
+    .big { font-size: 32px; font-weight: 800; color: var(--primary); }
+    .big small { font-size: 14px; font-weight: 500; color: var(--slate); }
+    .chart { position: relative; height: 220px; }
+    .empty { background: var(--warning-light); color: var(--warning); border-radius: 12px; padding: 12px; font-size: 14px; }
+    .updated { color: var(--slate); font-size: 12px; margin-top: auto; }
+    .login { max-width: 380px; margin: 60px auto; background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 12px; }
+    .login h2 { margin: 0; }
+    .login p { margin: 0; color: var(--slate); font-size: 14px; }
+    .login input { font: inherit; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; }
+    .error { color: #B91C1C; font-size: 14px; min-height: 18px; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ParchApp - Team Dashboard</h1>
+    <span class="spacer"></span>
+    <span class="who" id="who"></span>
+    <button class="primary" id="refresh" hidden>Refresh</button>
+    <button class="secondary" id="sign-out" hidden>Sign out</button>
+  </header>
+
+  <form class="login" id="login" hidden>
+    <h2>Sign in</h2>
+    <p>Use your ParchApp account to see the business questions.</p>
+    <input id="email" type="email" placeholder="name@university.edu" autocomplete="username" required>
+    <input id="password" type="password" placeholder="Password" autocomplete="current-password" required>
+    <div class="error" id="login-error"></div>
+    <button class="primary" type="submit">Sign in</button>
+  </form>
+
+  <main id="dashboard" hidden>
+    <p class="status" id="status"></p>
+    <div class="grid" id="cards"></div>
+  </main>
+
+  <script type="module">
+    import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {getAuth, connectAuthEmulator, onAuthStateChanged, signInWithEmailAndPassword, signOut}
+      from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import {getFirestore, connectFirestoreEmulator, doc, getDoc}
+      from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import {getFunctions, connectFunctionsEmulator, httpsCallable}
+      from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
+    import {firebaseConfig, useEmulators, emulatorProjectId} from "./firebase-config.js";
+
+// on localhost we talk to the emulators with the demo project, in hosting we use the real project
+    const app = initializeApp(useEmulators
+      ? {apiKey: "demo-key", projectId: emulatorProjectId, authDomain: "localhost"}
+      : firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const functions = getFunctions(app, "us-central1");
+    if (useEmulators) {
+      connectAuthEmulator(auth, "http://127.0.0.1:9099", {disableWarnings: true});
+      connectFirestoreEmulator(db, "127.0.0.1", 8080);
+      connectFunctionsEmulator(functions, "127.0.0.1", 5001);
+    }
+
+    const charts = {};
+    const $ = (id) => document.getElementById(id);
+    const FEATURE_NAMES = {
+      groups: "Groups", compare_availability: "Compare availability", schedule: "Schedule",
+      invitations: "Invitations", alerts: "Alerts",
+    };
+
+// one entry per business question, to add bq7 later copy one entry and change the document and the render
+    const QUESTIONS = [
+      {
+        id: "bq1", type: "Type 1", doc: "bq1_engine_latency",
+        question: "How long does the availability engine take on average for each group size?",
+        hasData: (data) => data.total_calculations > 0,
+        empty: "No availability calculations yet. Open Compare Availability in the app and press Refresh.",
+        render: (data) => ({
+          number: `${average(data.by_group_size)} ms`,
+          detail: `average of ${data.total_calculations} ${data.total_calculations === 1 ? "calculation" : "calculations"}`,
+          chart: {
+            labels: data.by_group_size.map((row) => `${row.group_size} people`),
+            datasets: [
+              {label: "Average ms", data: data.by_group_size.map((row) => row.avg_ms), backgroundColor: "#003D9B"},
+              {label: "p90 ms", data: data.by_group_size.map((row) => row.p90_ms), backgroundColor: "#93C5FD"},
+            ],
+          },
+        }),
+      },
+      {
+        id: "bq8", type: "Type 3", doc: "bq8_feature_usage",
+        question: "Which features of the app are used the least?",
+        hasData: (data) => data.total_uses > 0,
+        empty: "No feature uses yet. Use Groups, Schedule or Alerts in the app and press Refresh.",
+        render: (data) => ({
+          number: FEATURE_NAMES[data.least_used] || data.least_used,
+          detail: `is the least used of ${data.total_uses} uses`,
+          chart: {
+            labels: data.features.map((row) => FEATURE_NAMES[row.feature] || row.feature),
+            datasets: [{label: "Uses", data: data.features.map((row) => row.uses), backgroundColor: "#6366F1"}],
+          },
+          horizontal: true,
+        }),
+      },
+      {
+        id: "bq7", type: "Type 3", doc: "bq7_creation_abandonment",
+        question: "In which step do users abandon the creation of an activity most often?",
+        hasData: (data) => data.total_flows > 0,
+        empty: "No creation attempts yet. Open New Activity in the app, then press Refresh.",
+        render: (data) => {
+          const steps = [...data.steps].sort((a, b) => a.index - b.index);
+          const finishedPct = Math.round(1000 * data.total_finished / data.total_flows) / 10;
+          return {
+            number: data.most_abandoned_step ? (STEP_NAMES[data.most_abandoned_step] || data.most_abandoned_step) : "None",
+            detail: `${data.abandon_rate}% abandoned - ${data.total_flows} ${data.total_flows === 1 ? "attempt" : "attempts"} - ${finishedPct}% finished`,
+            chart: {
+              labels: steps.map((step) => STEP_NAMES[step.name] || step.name),
+              datasets: [{label: "% of attempts abandoned here", data: steps.map((step) => step.percent),
+                backgroundColor: steps.map((step) => step.name === data.most_abandoned_step ? "#E11D48" : "#FDA4AF")}],
+            },
+          };
+        },
+      },
+      {
+        id: "bq9", type: "Type 3", doc: "bq9_comparison_confirmation",
+        question: "How often is Compare Availability used before creating an activity, and how does it affect the share of activities that reach Confirmed?",
+        hasData: (data) => data.total_activities > 0,
+        empty: "No activities yet. Create a plan from Compare Availability and another one without it, then press Refresh.",
+        render: (data) => {
+          const withCompare = data.groups.find((row) => row.usage === "with_comparison");
+          const withoutCompare = data.groups.find((row) => row.usage === "without_comparison");
+          return {
+            number: `${data.comparison_rate}%`,
+            detail: `of ${data.total_activities} activities used Compare - ${withCompare.confirmation_pct}% confirmed with it, ${withoutCompare.confirmation_pct}% without`,
+            chart: {
+              labels: ["With Compare", "Without Compare"],
+              datasets: [
+                {label: "Created", data: [withCompare.created, withoutCompare.created], backgroundColor: "#93C5FD"},
+                {label: "Confirmed", data: [withCompare.confirmed, withoutCompare.confirmed], backgroundColor: "#10B981"},
+              ],
+            },
+          };
+        },
+      },
+    ];
+// bq7: names of the steps of the new activity form, in the order of the form
+    const STEP_NAMES = {
+      opened: "Opened", details: "Details", group: "Group", duration: "Duration",
+      date_time: "Date and time", place: "Place", review: "Review",
+    };
+
+// average of the averages, weighted by the number of calculations
+    function average(rows) {
+      const total = rows.reduce((sum, row) => sum + row.calculations, 0);
+      return total ? Math.round(10 * rows.reduce((sum, row) => sum + row.avg_ms * row.calculations, 0) / total) / 10 : 0;
+    }
+
+    function when(value) {
+      const date = value?.toDate ? value.toDate() : value ? new Date(value) : null;
+      return date ? `Updated ${date.toLocaleString()}` : "Not updated yet";
+    }
+
+// draws the empty cards once, then every load only fills them
+    function buildCards() {
+      $("cards").innerHTML = QUESTIONS.map((q) => `
+        <article class="card" id="card-${q.id}">
+          <div class="top"><span class="badge">${q.id.toUpperCase()}</span><span class="badge type">${q.type}</span><span class="badge test" id="${q.id}-test" hidden>Test data</span></div>
+          <h2>${q.question}</h2>
+          <div class="big" id="${q.id}-number">…</div>
+          <div class="empty" id="${q.id}-empty" hidden></div>
+          <div class="chart"><canvas id="${q.id}-chart"></canvas></div>
+          <div class="updated" id="${q.id}-updated"></div>
+        </article>`).join("");
+    }
+
+    function show(q, data) {
+      const ready = data && q.hasData(data);
+// the test data label shows when some of the numbers come from the seed of the emulators
+      $(`${q.id}-test`).hidden = !(data && data.test_flows > 0);
+      $(`${q.id}-empty`).hidden = ready;
+      $(`${q.id}-empty`).textContent = q.empty;
+      $(`${q.id}-chart`).parentElement.hidden = !ready;
+      $(`${q.id}-updated`).textContent = data ? `${when(data.updated_at)} - ${data.total_events ?? data.sample_size ?? 0} events` : "Not updated yet";
+      charts[q.id]?.destroy();
+      if (!ready) {
+        $(`${q.id}-number`).innerHTML = "—";
+        return;
+      }
+      const view = q.render(data);
+      $(`${q.id}-number`).innerHTML = `${view.number} <small>${view.detail}</small>`;
+      charts[q.id] = new Chart($(`${q.id}-chart`), {
+        type: "bar",
+        data: view.chart,
+        options: {
+          indexAxis: view.horizontal ? "y" : "x",
+          maintainAspectRatio: false,
+          plugins: {legend: {display: view.chart.datasets.length > 1}},
+          scales: {x: {beginAtZero: true}, y: {beginAtZero: true}},
+        },
+      });
+    }
+
+// reads every insight document, one missing document only empties its card
+    async function load() {
+      $("status").textContent = "Loading…";
+      await Promise.all(QUESTIONS.map(async (q) => {
+        try {
+          const snapshot = await getDoc(doc(db, "insights", q.doc));
+          show(q, snapshot.exists() ? snapshot.data() : null);
+        } catch (error) {
+          show(q, null);
+          $(`${q.id}-empty`).textContent = `Could not read this question: ${error.message}`;
+        }
+      }));
+      $("status").textContent = `Last read ${new Date().toLocaleTimeString()}${useEmulators ? " - local emulators" : ""}`;
+    }
+
+// the refresh button asks the backend to count the events again and then reads the cards
+    $("refresh").addEventListener("click", async () => {
+      $("refresh").disabled = true;
+      $("status").textContent = "Counting the events…";
+      try {
+        const result = await httpsCallable(functions, "refreshTeamInsights")();
+        await load();
+        $("status").textContent += ` - ${result.data.total_events} events counted`;
+      } catch (error) {
+        $("status").textContent = `Refresh failed: ${error.message}`;
+      } finally {
+        $("refresh").disabled = false;
+      }
+    });
+
+    $("login").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      $("login-error").textContent = "";
+      try {
+        await signInWithEmailAndPassword(auth, $("email").value.trim(), $("password").value);
+      } catch (error) {
+        $("login-error").textContent = "Wrong email or password";
+      }
+    });
+
+    $("sign-out").addEventListener("click", () => signOut(auth));
+
+// the dashboard only shows after the user signs in, the rules only let signed in users read insights
+    onAuthStateChanged(auth, (user) => {
+      $("login").hidden = !!user;
+      $("dashboard").hidden = !user;
+      $("refresh").hidden = !user;
+      $("sign-out").hidden = !user;
+      $("who").textContent = user ? user.email : "";
+      if (user) load();
+    });
+
+    buildCards();
+  </script>
+</body>
+</html>
