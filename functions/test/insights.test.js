@@ -1,8 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
-  loadQuery, buildSlotInsight, buildRecommendationInsight, buildResponseTimeInsight, DEFAULT_RECOMMENDED_POSITION,
-  MIN_SAMPLE, MIN_COMPLETED, MIN_RESPONSES,
+  loadQuery, buildSlotInsight, buildRecommendationInsight, buildResponseTimeInsight,
+  buildReminderTimingInsight, DEFAULT_RECOMMENDED_POSITION, MIN_SAMPLE, MIN_COMPLETED,
+  MIN_RESPONSES, MIN_REMINDERS_PER_DELAY,
 } = require("../src/insights");
 
 function row(slotPosition, accepted, unchanged) {
@@ -41,6 +42,7 @@ test("no events gives the default", () => {
 
 test("every SQL file points at the real export dataset after loading", () => {
   for (const file of ["bq1_availability_latency.sql", "bq3_slot_acceptance.sql", "bq5_response_time.sql",
+    "bq6_reminder_response_timing.sql",
     "bq8_feature_usage.sql", "bq9_comparison_confirmation.sql"]) {
     const sql = loadQuery(file, "my-project", "analytics_123");
     assert.match(sql, /`my-project\.analytics_123\.events_\*`/);
@@ -106,4 +108,27 @@ test("BQ5 with no events gives an empty document", () => {
   const insight = buildResponseTimeInsight([]);
   assert.deepEqual(insight.by_group_size, []);
   assert.equal(insight.invitations, 0);
+});
+
+test("BQ6 picks the highest response rate after enough reminders per delay", () => {
+  const insight = buildReminderTimingInsight([
+    {delay_minutes: 30, reminders: MIN_REMINDERS_PER_DELAY, responses_after_reminder: 10,
+      avg_response_minutes: 8},
+    {delay_minutes: 60, reminders: MIN_REMINDERS_PER_DELAY, responses_after_reminder: 15,
+      avg_response_minutes: 12},
+    {delay_minutes: 120, reminders: MIN_REMINDERS_PER_DELAY - 1, responses_after_reminder: 18,
+      avg_response_minutes: 4},
+  ]);
+  assert.equal(insight.recommended_delay_minutes, 60);
+  assert.equal(insight.recommendation_ready, true);
+  assert.equal(insight.by_delay.find(row => row.delay_minutes === 60).response_rate_pct, 75);
+});
+
+test("BQ6 keeps the 60-minute default until a delay has enough responses", () => {
+  const insight = buildReminderTimingInsight([
+    {delay_minutes: 30, reminders: MIN_REMINDERS_PER_DELAY - 1, responses_after_reminder: 10,
+      avg_response_minutes: 8},
+  ]);
+  assert.equal(insight.recommended_delay_minutes, 60);
+  assert.equal(insight.recommendation_ready, false);
 });
