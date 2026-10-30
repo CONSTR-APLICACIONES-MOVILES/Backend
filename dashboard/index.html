@@ -108,6 +108,21 @@
 
 // one entry per business question, to add bq7 later copy one entry and change the document and the render
     const QUESTIONS = [
+            {
+        id: "bq11", type: "Type 4", owner: "Jhon Vega", doc: "bq11_confirmed_activity_areas",
+        question: "¿En qué franjas horarias y zonas del campus se concentran las actividades confirmadas?",
+        hasData: data => data.total_confirmed > 0,
+        empty: "Sin actividades confirmadas en los últimos 30 días.",
+        render: data => ({
+          number: `${data.top.pct}%`,
+          detail: `${data.top.area} · ${BUCKET_NAMES[data.top.time_bucket] || data.top.time_bucket}`,
+          metrics: `Actividades confirmadas: ${data.total_confirmed}. Ventana: 30 días.\nSolo zonas generales del campus, sin coordenadas exactas.`,
+          table: {headers: ["Zona", "Franja", "Confirmadas", "%"],
+            rows: data.rows.map(r => [r.area, BUCKET_NAMES[r.time_bucket] || r.time_bucket, r.confirmed, `${r.pct}%`])},
+          chart: {labels: data.rows.map(r => `${r.area} · ${BUCKET_NAMES[r.time_bucket] || r.time_bucket}`),
+            datasets: [{label: "Confirmadas", data: data.rows.map(r => r.confirmed), backgroundColor: "#2563EB"}]},
+        }),
+      },
       {
         id:"bq14",owner:"Equipo de analítica",type:"Reminder strategies",doc:"bq14_reminder_effectiveness",
         question:"¿Qué estrategia de recordatorios confirma antes con menos avisos, según el tamaño del grupo?",
@@ -240,9 +255,10 @@
         },
       },
     ].sort((a,b) => {
-      const order = ["bq2","bq13","bq14","bq3","bq1","bq8","bq7","bq9"];
+      const order = ["bq2","bq13","bq14","bq3","bq1","bq8","bq7","bq9","bq11"];
       return order.indexOf(a.id)-order.indexOf(b.id);
     });
+    const BUCKET_NAMES = {morning: "Mañana", afternoon: "Tarde", evening: "Noche", night: "Madrugada", unknown: "Sin hora"};
 // bq7: names of the steps of the new activity form, in the order of the form
     const STEP_NAMES = {
       opened: "Opened", details: "Details", group: "Group", duration: "Duration",
