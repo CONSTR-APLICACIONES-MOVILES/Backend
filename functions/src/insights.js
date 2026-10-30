@@ -61,6 +61,9 @@ function buildRecommendationInsight(records) {
 const MIN_COMPLETED = 3;
 
 const MIN_RESPONSES = 5;
+const MIN_REMINDERS_PER_DELAY = 20;
+const DEFAULT_REMINDER_DELAY_MINUTES = 60;
+const REMINDER_DELAY_CANDIDATES = [30, 60, 120];
 
 function numberOrNull(value) {
   return value === null || value === undefined ? null : Number(value);
@@ -106,13 +109,65 @@ function buildResponseTimeInsight(rows) {
   };
 }
 
+/* BQ6: select the delay with the strongest response rate once each timing arm
+   has a useful denominator. Ties prefer faster post-reminder responses, then
+   the shorter delay. */
+function buildReminderTimingInsight(rows) {
+  const grouped = new Map();
+  for (const row of rows) {
+    const delay = Number(row.delay_minutes);
+    if (!REMINDER_DELAY_CANDIDATES.includes(delay)) continue;
+    const reminders = Math.max(0, Number(row.reminders) || 0);
+    const responses = Math.min(reminders, Math.max(0, Number(row.responses_after_reminder) || 0));
+    const average = numberOrNull(row.avg_response_minutes);
+    const current = grouped.get(delay) || {
+      delay_minutes: delay, reminders: 0, responses_after_reminder: 0,
+      weighted_response_minutes: 0,
+    };
+    current.reminders += reminders;
+    current.responses_after_reminder += responses;
+    if (average !== null && responses > 0) current.weighted_response_minutes += average * responses;
+    grouped.set(delay, current);
+  }
+
+  const byDelay = [...grouped.values()].map((row) => ({
+    delay_minutes: row.delay_minutes,
+    reminders: row.reminders,
+    responses_after_reminder: row.responses_after_reminder,
+    response_rate_pct: row.reminders
+      ? Math.round(1000 * row.responses_after_reminder / row.reminders) / 10 : null,
+    avg_response_minutes: row.responses_after_reminder
+      ? Math.round(10 * row.weighted_response_minutes / row.responses_after_reminder) / 10 : null,
+  })).sort((a, b) => a.delay_minutes - b.delay_minutes);
+
+  const eligible = byDelay.filter((row) => row.reminders >= MIN_REMINDERS_PER_DELAY &&
+    row.responses_after_reminder > 0);
+  eligible.sort((a, b) => b.response_rate_pct - a.response_rate_pct ||
+    (a.avg_response_minutes ?? Number.POSITIVE_INFINITY) -
+      (b.avg_response_minutes ?? Number.POSITIVE_INFINITY) ||
+    a.delay_minutes - b.delay_minutes);
+  const recommendedDelay = eligible[0]?.delay_minutes ?? DEFAULT_REMINDER_DELAY_MINUTES;
+  return {
+    recommended_delay_minutes: recommendedDelay,
+    recommended_strategy: `rsvp_after_${recommendedDelay}_min`,
+    recommendation_ready: eligible.length > 0,
+    min_reminders_per_delay: MIN_REMINDERS_PER_DELAY,
+    sample_size: byDelay.reduce((sum, row) => sum + row.reminders, 0),
+    by_delay: byDelay,
+  };
+}
+
 module.exports = {
   loadQuery,
   buildSlotInsight,
   buildRecommendationInsight,
   buildResponseTimeInsight,
+  buildReminderTimingInsight,
   DEFAULT_RECOMMENDED_POSITION,
   MIN_SAMPLE,
   MIN_COMPLETED,
   MIN_RESPONSES,
+  MIN_REMINDERS_PER_DELAY,
+  DEFAULT_REMINDER_DELAY_MINUTES,
+  REMINDER_DELAY_CANDIDATES,
 };

@@ -2,6 +2,7 @@ const {createHash, randomUUID} = require('node:crypto');
 const {CAMPUS_AREAS} = require("./campusAreas");
 const {requireThat, documentId, integer} = require('./errors');
 const {localDate, dayStart, MINUTE, hasSchedule, TIME_ZONE} = require('./availability');
+const {chooseRsvpReminderDelay} = require('./reminderTiming');
 
 const {canShare} = require('./communityService');
 const {consumeComparison} = require('./coordinationInsights');
@@ -147,6 +148,7 @@ class ActivityLifecycle {
       }
       const group = (await tx.get(this.db.doc(`groups/${input.groupId}`))).data();
       requireThat(group?.memberIds?.includes(uid), 'permission-denied', 'Group membership is required.');
+      const reminderInsight = (await tx.get(this.db.doc('insights/bq6_reminder_timing'))).data();
       const ids = participants(input.participantIds, group, uid);
       const now = this.clock();
       const scheduled = input.startTime != null || input.endTime != null;
@@ -201,11 +203,17 @@ class ActivityLifecycle {
           isRead: false,
         }, {merge: true});
         if (slot) {
-          tx.set(this.db.doc(`inboxes/${participantId}/items/${activityId}/reminders/initial`), {
-            activityId, purpose: 'rsvp', strategy: 'single_after_60_min', sequence: 1,
-            scheduledAt: new Date(now.getTime() + 60 * MINUTE), sentAt: null,
-            deliveredAt: null, openedAt: null, respondedAt: null, status: 'SCHEDULED',
-          }, {merge: true});
+          const minutesUntilStart = Math.floor((slot.start.getTime() - now.getTime()) / MINUTE);
+          const delayMinutes = chooseRsvpReminderDelay(activityId, participantId,
+              reminderInsight?.recommended_delay_minutes, minutesUntilStart);
+          if (delayMinutes != null) {
+            tx.set(this.db.doc(`inboxes/${participantId}/items/${activityId}/reminders/initial`), {
+              activityId, purpose: 'rsvp', strategy: `rsvp_after_${delayMinutes}_min`,
+              sequence: 1, delayMinutes,
+              scheduledAt: new Date(now.getTime() + delayMinutes * MINUTE), sentAt: null,
+              deliveredAt: null, openedAt: null, respondedAt: null, status: 'SCHEDULED',
+            }, {merge: true});
+          }
         }
       }
       tx.create(commandRef, {fingerprint, receipt, createdAt: now});
