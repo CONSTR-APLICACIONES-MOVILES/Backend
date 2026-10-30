@@ -1,104 +1,52 @@
-# ParchApp Backend
+# ParchApp shared Firebase backend
 
-Firebase backend shared by the ParchApp **Android (Java)** and **Flutter** apps. The verified live project is `parchapp-ee6cc`: Authentication, Firestore `(default)` and Functions in `us-central1`. The current analytics runtime aggregates server records in Firestore; a Firebase Analytics export to BigQuery has not been verified. See [live integration and limits](docs/INTEGRACION_ANALITICA_SPRINT3.md) and [block 0 handoff](docs/EMPALME_BLOQUE_0_A_1.md).
+Shared server contracts for Flutter and Android Java. Live project: **parchapp-ee6cc**, Firestore default database, Functions **us-central1**. The current BQ runtime aggregates Firestore records; a live Firebase Analytics→BigQuery export is not certified.
 
-```
-firestore.rules            Who can read and write what (tested in tests/)
-firestore.indexes.json     Composite index for activities by group
-docs/data-model.md         Field-by-field contract both apps must follow
-functions/
-  index.js                 Cloud Functions
-  src/demoData.js          Demo groups, port of DemoData.java
-  src/insights.js          Computes BQ3 from presented recommendations and decisions, and turns the BQ5 query result into insights/bq5_response_time
-  src/activityRepository.js Firestore access for activities and recommendation records
-  src/activityService.js  Activity Details and recommendation lifecycle
-  src/availability.js     Availability engine and replaceable ranking strategy
-  src/activityCallables.js Authenticated callable API shared by both apps
-  sql/                     One BigQuery query per implemented Business Question
-  scripts/seed.js          Writes the demo groups to Firestore
-tests/                     Security rules tests (Firestore emulator)
-```
+## Documentation
 
-## Cloud Functions
+- [Analytics and shared dashboard](docs/analytics-dashboard.md): BQ2/3/13/14, security, local verification and publication boundary.
+- [Data model](docs/data-model.md): shared collection/field contracts.
+- Flutter's separate repository has the canonical architecture, feature inventory and test guide under ParchApp-Flutter/docs/.
 
-| Function | Trigger | What it does |
-|---|---|---|
-| `refreshSlotRecommendation` | Every day, 4:00 AM Bogotá | Computes unchanged acceptances / presented candidates from backend records over 30 days and updates `insights/bq3_slot_acceptance`. The apps use the position with the highest acceptance rate for their "Recommended" badge |
-| `getActivity` | Authenticated callable | Activity Details with participants, group RSVP, and availability |
-| `getActivityRecommendations` | Organizer callable | Generates ranked common free slots using current schedules, preferred hours and minimum notice |
-| `presentActivityRecommendations` | Organizer callable | Acknowledges the candidates actually displayed, once per ID |
-| `acceptActivityRecommendation`, `modifyActivityRecommendation` | Organizer callable | Atomically records a decision and updates the activity schedule |
-| `getActivityRecommendationAnalytics` | Organizer callable | Per-activity BQ3 counts and percentage |
-| `refreshResponseTimeInsight` | Every day, 4:15 AM Bogotá | Aggregates server-acknowledged Firestore invitations and responses into `insights/bq5_response_time`; preserves the Flutter feedback contract without a placeholder dataset |
-| `prepareProposalComparison`, `getCoordinationInsight` | Authenticated callables | Validates comparison evidence and reads the shared BQ9 aggregate. Code deployed; new-service invoker IAM remains blocked |
-| `refreshTeamInsights`, `refreshTeamInsightsNightly` | Callable / daily 4:30 AM Bogotá | Existing team pipeline: BQ1/BQ8 plus BQ5/BQ9 aggregates from the same Firestore database |
-| `resetRsvpOnNewActivity` | New `activities` document | Empties `goingIds` and `maybeIds` of the activity's group, so every invitation starts with no answers (BQ5) |
-| `refreshReminderTimingInsight` | Every day, 4:30 AM Bogotá | Runs `sql/bq6_reminder_response_timing.sql` and writes response rates by 30/60/120-minute RSVP reminder delay to `insights/bq6_reminder_timing`. |
-| `dispatchPendingReminders` | Every five minutes | Converts due in-app reminders into alert events, records `sentAt`, and increments the participant reminder count for BQ6/BQ14 |
-| `joinDemoGroupsOnSignUp` | New Firebase Auth account | Adds the account to the demo groups so a new user can RSVP and create activities immediately. Remove it once the apps can create and join groups |
+## Local setup
 
-BQ1, BQ2, BQ4 and BQ7-BQ14 are implemented as BigQuery **scheduled queries** over the Analytics export, feeding the Looker Studio dashboard. BQ3 remains backed by authoritative Firestore recommendation records. BQ5 and BQ6 use scheduled Functions to run their BigQuery queries and publish feedback documents for the apps.
-The SQL files are reference queries, not evidence of deployed BigQuery scheduled queries. The verified shared dashboard is https://parchapp-ee6cc.web.app and currently displays BQ1/BQ3/BQ8; its BQ9 card is still pending. BQ3 remains backed by authoritative Firestore recommendation records. BQ9's aggregate exists in Firestore, with zero mature activities at the last check.
+Use Node.js 22, npm and Java 21. From this checkout:
 
-The shared [Activity API contract](docs/activity-api.md) includes Java/Flutter
-examples, scoring, retry behavior, and BQ3 semantics. The initial engine uses
-today's Bogotá schedules already stored on group members; Google Calendar sync
-and multi-day availability are not implemented in this repository.
-
-## Local development
-
-Requirements: Node 22 and Java 21+ (required by the current Firebase CLI emulators).
-
-```bash
-npm install                    # root: Firebase CLI and test tools
-npm --prefix functions install
-npm test                       # function unit tests + security rules tests
-npm run emulators              # Auth, Firestore, Functions and the Emulator UI at http://localhost:4000
+```powershell
+npm ci
+npm --prefix functions ci
+npm run emulators
 ```
 
-To seed the running emulator, in a second terminal:
+Standard ports: Auth 9099, Firestore 8080, Functions 5001. The CLI uses an explicit demo project in the emulator launcher; read scripts before running seeds/reset commands. Keep local emulator exports/configuration and credentials outside commits.
 
-```bash
-cd functions
-FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run seed -- --project demo-parchapp
+```powershell
+npm run test:functions
+npm run test:rules
 ```
 
-(PowerShell: `$env:FIRESTORE_EMULATOR_HOST="127.0.0.1:8080"; npm run seed -- --project demo-parchapp`)
+Unit tests include aggregate builders and dashboard/server contract checks. Rules/API tests require isolated Firebase emulators. Several legacy tests expect standard ports; the current metrics suites also support an explicitly supplied FIRESTORE_EMULATOR_HOST.
 
-`demo-parchapp` is an emulator-only project ID, so nothing you do locally touches a real project. On Windows, if an emulator reports "port taken", a previous run left its Java process open; close it in Task Manager.
+## Runtime map
 
-## Setup on a real Firebase project
+| Path | Responsibility |
+|---|---|
+| functions/index.js | Exports callables, schedules and triggers |
+| functions/src/mobileCallables.js | Authenticated DTO and UID boundary |
+| functions/src/activityService.js | Activity recommendations and decisions |
+| functions/src/activityLifecycle.js | Idempotent publication/edit/cancel |
+| functions/src/activityParticipants.js | Group-scoped participation and consented friend invitations |
+| functions/src/socialService.js | Username claims and versioned friendships |
+| functions/src/activityInsights.js | BQ2/BQ3/BQ13 aggregation and ranking feedback |
+| functions/src/reminderInsights.js | BQ14 policy, delivery deduplication and aggregation |
+| dashboard/index.html | Shared organization dashboard with existing team cards |
+| dashboard/activity-questions.mjs | Contributor cards for BQ2/3/13/14 |
+| firestore.rules / firestore.indexes.json | Client authorization and query indexes |
 
-1. Create the project in the Firebase console and register both apps (Android package `com.example.parchapp`, plus the Flutter app). Each app keeps its own `google-services.json` / `GoogleService-Info.plist`; they never go in this repo.
-2. Enable **Authentication → Email/Password** and create the **Firestore** database.
-3. Link the project to this repo and deploy the rules:
-   ```bash
-   npx firebase login
-   npx firebase use --add          # pick the project, alias "default"
-   npm run deploy:rules
-   ```
-4. Seed the demo groups (once):
-   ```bash
-   gcloud auth application-default login
-   npm --prefix functions run seed -- --project <project-id>
-   ```
-5. **Analytics → BigQuery.** In Project settings -> Integrations, link BigQuery with daily export. For BQ1 and BQ8, paste `functions/sql/bq1_*.sql` and `bq8_*.sql` into BigQuery as scheduled queries (replace the table placeholder with your project and `analytics_<property id>` dataset) and connect their destination tables to Looker Studio. Put the dataset name in `functions/.env` as `ANALYTICS_DATASET`: `refreshResponseTimeInsight` (BQ5) reads it. BQ3 runs from backend Firestore records and does not use it; its SQL is an optional client-event mirror described in the Activity API contract.
-6. Deploy the functions. This needs the **Blaze** (pay-as-you-go) plan, and it stays in the free tier at this scale:
-   ```bash
-   npm run deploy:functions
-   ```
+## Verified cloud connection — 2026-10-30
 
-## Rules for both apps
+The user subsequently authorized connection without a commit. Sources were downloaded from the deployed Cloud Functions and Hosting before publication. Only recordCreationAttempt, refreshActivityInsights and Hosting were deployed; team functions were preserved. The deployed dashboard retains **ParchApp login for every reader**. Any signed-in account can read; only orgAnalytics accounts can refresh. No anonymous Firestore access was published, and the existing cloud read rule was retained.
 
-- Never write a group's `members`, `memberIds`, `name` or `planTitle` from a client; the rules reject it.
-- Always use `arrayUnion`/`arrayRemove` for `goingIds`, `maybeIds` and `pendingInvites`.
-- Query activities with `where('groupId', ...)`.
-- Follow the analytics contracts in `docs/data-model.md`; the optional BQ3 mirror adds presentation events and recommendation IDs.
+Authorized refresh returned HTTP 200 and the four aggregate documents were read with Firebase Auth: BQ2 has 0 uploaded attempts (rate unavailable); BQ3 has 0/19 unchanged acceptances (0%); BQ13 has 19 historical opportunities without sufficient attribution and no mature denominator; BQ14 has 5 pending instrumented activities and no mature strategy comparison. No fictional records were created. recordCreationAttempt now rejects anonymous requests with JSON 401 instead of transport 403. Reopen the app to retry any locally retained telemetry and refresh again after actual activity use.
 
-Details and code snippets for Java and Dart are in [docs/data-model.md](docs/data-model.md).
-
-## Tests
-
-- `functions/test/`: availability/ranking boundaries, BQ3 denominator and feedback, demo data, SQL table substitution.
-- `tests/activity.api.test.js`: callable handlers with real Firestore transactions, authorization, decisions, concurrent retries, stale context and BQ3 records. Auth context is injected; Firebase HTTP token verification is not exercised.
-- `tests/firestore.rules.test.js`: runs the exact writes the Android app makes (RSVP, invitations, activity creation) and checks what outsiders and signed-out users are denied.
+Live dashboard: https://parchapp-ee6cc.web.app/ . A commit is still needed for source traceability. Physical-device acceptance, distribution, submission and video remain separate pending tasks.

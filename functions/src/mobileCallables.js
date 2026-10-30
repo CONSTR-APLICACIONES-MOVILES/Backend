@@ -2,6 +2,8 @@ const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {ServiceError} = require("./errors");
 const {requireOrganizationAnalytics} = require('./organizationAccess');
 const FIELDS = {
+  inviteGroupFriend:['groupId','userId','clientUserId'],
+  getActivityParticipants:['activityId'], changeActivityParticipants:['activityId','action','userId','expectedVersion','clientUserId'],
   setUsername:['username','clientUserId'], searchPeople:['query','cursor','limit'],getPublicPerson:['userId'],
   getFriends:['cursor','limit'],changeFriendship:['userId','action','expectedVersion','clientUserId'],
   recordCreationAttempt: ['attemptId','requestId','phase','startedAt','outcome','durationMs','errorCode','clientUserId'],
@@ -23,11 +25,11 @@ const FIELDS = {
   getProfile: [], updateProfile: ["fields", "clientUserId"], getAlerts: [], getActivities: [],
   setActivityReminder: ["activityId", "minutesBefore"],
   markNotificationEventsRead: ["ids", "clientUserId"],
-  markAlertsRead: ["ids", "clientUserId"], respondToActivityInvitation: ["id", "response", "clientUserId"],
+  markAlertsRead: ["ids", "clientUserId"], respondToActivityInvitation: ["id", "response", "expectedResponse", "clientUserId"],
 };
 function createMobileCallables(service) {
   return Object.fromEntries(Object.entries(FIELDS).map(([name, fields]) => [name,
-    onCall({region: "us-central1"}, async (request) => {
+    onCall({region: "us-central1", ...(name === 'recordCreationAttempt' ? {invoker:'public'} : {})}, async (request) => {
       if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to continue.");
       if (name === 'getCoordinationInsight') requireOrganizationAnalytics(request);
       if (request.data?.clientUserId !== undefined && request.data.clientUserId !== request.auth.uid) {

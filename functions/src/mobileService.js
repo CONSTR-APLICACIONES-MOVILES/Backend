@@ -31,6 +31,9 @@ class MobileService {
   }
 
   getCommunityPeers(uid, input) { return this.community.getCommunityPeers(uid, input); }
+  inviteGroupFriend(uid,input) { return new (require('./activityParticipants').ActivityParticipants)(this.db,{clock:this.clock}).inviteGroupFriend(uid,input); }
+  getActivityParticipants(uid, input) { return new (require('./activityParticipants').ActivityParticipants)(this.db, {clock:this.clock}).getActivityParticipants(uid,input); }
+  changeActivityParticipants(uid, input) { return new (require('./activityParticipants').ActivityParticipants)(this.db, {clock:this.clock}).changeActivityParticipants(uid,input); }
   setUsername(uid,input){return this.social.setUsername(uid,input);}
   searchPeople(uid,input){return this.social.searchPeople(uid,input);}
   getPublicPerson(uid,input){return this.social.getPublicPerson(uid,input);}
@@ -265,7 +268,7 @@ class MobileService {
           (!a.data().participantIds || a.data().participantIds.includes(uid)))
         .sort((a, b) => Date.parse(iso(b.data().createdAt)) - Date.parse(iso(a.data().createdAt))).slice(0, 200);
     const extra = await additionalAlerts(this.db,uid,groups,pages.flatMap(p=>p.docs),this.clock());
-    if (!activities.length) return {alerts: extra};
+    if (!activities.length) return {alerts: extra.sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt)).slice(0,200)};
     const states = await this.db.getAll(...activities.map((a) => this.db.doc(`inboxes/${uid}/items/${a.id}`)));
     const invitations = activities.map((a, index) => ({kind: "invitation", id: a.id, title: a.data().title,
       groupSize: (a.data().participantIds || groups.find((g) => g.id === a.data().groupId).data().memberIds).length,
@@ -373,7 +376,7 @@ class MobileService {
   }
 
   async markNotificationEventsRead(uid, input) {
-    requireThat(Array.isArray(input.ids) && input.ids.every(id => /^(evt|grp|rem)_[a-f0-9]{64}$/.test(id)), 'invalid-argument', 'Supply event notification IDs.');
+    requireThat(Array.isArray(input.ids) && input.ids.every(id => /^(evt|grp|rem|friend)_[a-f0-9]{64}$/.test(id)), 'invalid-argument', 'Supply event notification IDs.');
     return this.markAlertsRead(uid,input);
   }
 
@@ -399,20 +402,22 @@ class MobileService {
       const {activity} = await this.requireInvitation(tx, uid, input.id, true);
       const ref = this.db.doc(`inboxes/${uid}/items/${input.id}`);
       const existing = (await tx.get(ref)).data();
-      requireThat(!existing?.response || existing.response === input.response,
-          "failed-precondition", "This invitation already has a response.");
+      requireThat((input.expectedResponse ?? null) === (existing?.response || null) || existing?.response === input.response,
+          'aborted', 'Your response changed. Reload before trying again.');
       // Per-activity response, independent of legacy group-level RSVP arrays.
-      if (!existing?.response) {
+      if (existing?.response !== input.response) {
         const respondedAt = this.clock();
         const invitedAt = existing?.invitedAt?.toDate ? existing.invitedAt.toDate() :
           existing?.invitedAt ? new Date(existing.invitedAt) :
           activity.createdAt?.toDate ? activity.createdAt.toDate() : new Date(respondedAt);
-        tx.set(ref, {isRead: true, response: input.response, respondedAt,
-          responseMs: Math.max(0, respondedAt.getTime() - invitedAt.getTime()),
+        tx.set(ref, {isRead: true, response: input.response,
+          firstResponse: existing?.firstResponse || existing?.response || input.response,
+          respondedAt: existing?.respondedAt || respondedAt, lastResponseAt: respondedAt,
+          responseMs: existing?.responseMs ?? Math.max(0, respondedAt.getTime() - invitedAt.getTime()),
           availabilityAtInvitation: existing?.availabilityAtInvitation || 'UNKNOWN'}, {merge: true});
         tx.set(this.db.doc(`activities/${input.id}/lifecycle/response-${uid}`), {
           type: 'RESPONSE_RECEIVED', activityId: input.id, actorId: uid,
-          response: input.response, createdAt: respondedAt,
+          response: input.response, createdAt: existing?.respondedAt || respondedAt, updatedAt: respondedAt,
         }, {merge: true});
       }
     });

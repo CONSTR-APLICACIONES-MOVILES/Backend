@@ -64,7 +64,7 @@
 
   <form class="login" id="login" hidden>
     <h2>Sign in</h2>
-    <p>Use your ParchApp account to see the business questions.</p>
+    <p>Sign in with your ParchApp account to see the business questions.</p>
     <input id="email" type="email" placeholder="name@university.edu" autocomplete="username" required>
     <input id="password" type="password" placeholder="Password" autocomplete="current-password" required>
     <div class="error" id="login-error"></div>
@@ -84,6 +84,7 @@
       from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import {getFunctions, connectFunctionsEmulator, httpsCallable}
       from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
+    import {createActivityQuestions} from "./activity-questions.mjs";
     import {firebaseConfig, useEmulators, emulatorProjectId} from "./firebase-config.js";
 
 // on localhost we talk to the emulators with the demo project, in hosting we use the real project
@@ -108,6 +109,7 @@
 
 // one entry per business question, to add bq7 later copy one entry and change the document and the render
     const QUESTIONS = [
+      ...createActivityQuestions({reminderLabel}),
             {
         id: "bq11", type: "Type 4", owner: "Jhon Vega", doc: "bq11_confirmed_activity_areas",
         question: "¿En qué franjas horarias y zonas del campus se concentran las actividades confirmadas?",
@@ -121,65 +123,6 @@
             rows: data.rows.map(r => [r.area, BUCKET_NAMES[r.time_bucket] || r.time_bucket, r.confirmed, `${r.pct}%`])},
           chart: {labels: data.rows.map(r => `${r.area} · ${BUCKET_NAMES[r.time_bucket] || r.time_bucket}`),
             datasets: [{label: "Confirmadas", data: data.rows.map(r => r.confirmed), backgroundColor: "#2563EB"}]},
-        }),
-      },
-      {
-        id:"bq14",owner:"Equipo de analítica",type:"Reminder strategies",doc:"bq14_reminder_effectiveness",
-        question:"¿Qué estrategia de recordatorios confirma antes con menos avisos, según el tamaño del grupo?",
-        hasData:data=>data.total>0,
-        empty:"Sin actividades instrumentadas para comparar estrategias. No hay un ganador demostrado.",
-        render:data=>({
-          number:`${data.mature_activities}`,detail:"actividades maduras comparables",
-          metrics:`Canal: in-app. Ventana: 24 h desde invitación. Pendientes: ${data.pending} · Proyección desconocida: ${data.unknown}.\nSolo cohortes instrumentadas con política RSVP; históricos sin política quedan fuera.\nLa confirmación es estado de actividad, no consenso RSVP. Comparación observacional, sin afirmar causalidad.\n${data.decisions.map(d=>`${d.size}: ${d.strategy?reminderLabel(d.strategy):'evidencia insuficiente / sin mejora conjunta'}`).join('\n')}`,
-          table:{headers:["Tamaño / estrategia","n / confirmación","Mediana / p95 min","Avisos / actividad"],
-            rows:data.by_strategy_size.map(r=>[`${r.size} · ${reminderLabel(r.strategy)}`,`${r.activities} / ${r.confirmation_rate}%`,`${r.median_minutes??'—'} / ${r.p95_minutes??'—'}`,r.notifications_per_activity.toFixed(2)])},
-          chart:{labels:data.by_strategy_size.map(r=>`${r.size} · ${reminderLabel(r.strategy)}`),datasets:[{label:"Confirmación %",data:data.by_strategy_size.map(r=>r.confirmation_rate),backgroundColor:"#10B981"}]},
-        }),
-      },
-      {
-        id: "bq2", type: "Type 1", owner: "Equipo de analítica", doc: "bq2_creation_reliability",
-        question: "¿Qué porcentaje de solicitudes de creación falla o termina en timeout?",
-        hasData: data => data.attempts > 0,
-        empty: "Sin intentos instrumentados en los últimos 30 días. No se calcula una tasa con denominador vacío.",
-        render: data => ({
-          number: `${data.failure_or_timeout_pct}%`,
-          detail: `${data.failure + data.timeout} fallos/timeouts de ${data.attempts} intentos`,
-          metrics: `Éxito: ${data.success} · Fallo: ${data.failure} · Timeout: ${data.timeout} · Sin resolver: ${data.unresolved}\nCobertura: ${data.coverage_pct}% · p95: ${data.p95_duration_ms ?? '—'} ms\nPublicaciones lógicas: ${data.logical_publications} · Timeout con éxito posterior: ${data.reconciled_success}\nDeadline cliente: 8 s. Se conservan los timeouts aunque el servidor confirme después.\nCobertura Flutter instrumentado; Java heredado y observaciones todavía locales no están incluidos.`,
-          chart: {labels: ["Éxito", "Fallo", "Timeout", "Sin resolver"],
-            datasets: [{label: "Intentos", data: [data.success,data.failure,data.timeout,data.unresolved], backgroundColor: ["#10B981","#DC2626","#D97706","#64748B"]}]},
-        }),
-      },
-      {
-        id: "bq13", type: "Type 5", owner: "Equipo de analítica", doc: "bq13_recommendation_confirmation",
-        question: "¿Qué horarios recomendados logran mayor tasa de confirmación en grupos similares?",
-        hasData: data => data.opportunities > 0,
-        empty: "Sin recomendaciones presentadas en los últimos 30 días. Se conserva el ranking base.",
-        render: data => ({
-          number: data.confirmation_rate === null ? "—" : `${data.confirmation_rate}%`,
-          detail: `${data.confirmed} confirmaciones atribuibles / ${data.mature_opportunities} oportunidades maduras`,
-          metrics: `Ventana de observación: 24 h desde la primera exposición del lote.\nPendientes: ${data.pending} · Históricos sin atribución: ${data.unknown} · Cobertura: ${data.coverage_pct}%\nSolo la sugerencia elegida sin cambios recibe la primera confirmación. Aceptar no es confirmar.\nRanking histórico desde 20 oportunidades por segmento y agregado de menos de 48 h; de lo contrario, ranking base.\nConfirmación es estado CONFIRMED de la actividad, no consenso RSVP.`,
-          table: {headers: ["Grupo / categoría", "Día / franja", "Muestra", "Confirmación"],
-            rows: data.by_segment.map(row => [`${row.size} · ${row.category}`, `${["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"][row.weekday]} · ${row.bucket}`, row.opportunities, `${row.confirmation_rate}%`])},
-          chart: {labels: data.by_segment.map(row => `${row.size} · ${row.bucket} · día ${row.weekday}`),
-            datasets: [{label: "Confirmación %", data: data.by_segment.map(row => row.confirmation_rate), backgroundColor: "#003D9B"}]},
-        }),
-      },
-      {
-        id: "bq3", type: "Type 2", doc: "bq3_slot_acceptance",
-        question: "What percentage of presented recommendations are accepted without changes?",
-        hasData: (data) => data.sample_size > 0,
-        empty: "No presented recommendations in the current window. The base ranking remains active.",
-        render: (data) => ({
-          number: `${data.pct_unchanged_overall}%`,
-          detail: `${data.accepted_recommendations_unchanged} unchanged / ${data.sample_size} presented`,
-          metrics: `Modified: ${data.modified ?? '—'} · Not selected: ${data.not_selected ?? '—'} · Undecided: ${data.undecided ?? '—'}\nThe denominator includes all unique exposed candidates, not only decisions.`,
-          chart: {
-            labels: data.by_position.map((row) => `Position ${row.slot_position + 1}`),
-            datasets: [
-              {label: "Presented", data: data.by_position.map((row) => row.presented), backgroundColor: "#93C5FD"},
-              {label: "Accepted unchanged", data: data.by_position.map((row) => row.accepted_unchanged), backgroundColor: "#003D9B"},
-            ],
-          },
         }),
       },
       {
@@ -297,10 +240,11 @@
 // the test data label shows when some of the numbers come from the seed of the emulators
       $(`${q.id}-test`).hidden = !(data && (useEmulators || data.test_flows > 0 || data.environment === "test"));
       $(`${q.id}-empty`).hidden = ready;
-      $(`${q.id}-empty`).textContent = q.empty;
+      $(`${q.id}-empty`).textContent = data ? q.empty :
+        'No aggregate has been published for this question. Refresh requires the configured backend; the available sample is not established yet.';
       $(`${q.id}-chart`).parentElement.hidden = !ready;
       const range = data?.window_start && data?.window_end ? ` · ${dateLabel(data.window_start)} – ${dateLabel(data.window_end)}` : "";
-      $(`${q.id}-updated`).textContent = data ? `${when(data.updated_at || data.updatedAt)} · ${useEmulators ? "test" : data.environment || "production"}${range}` : "Agregado todavía no publicado";
+      $(`${q.id}-updated`).textContent = data ? `${when(data.updated_at || data.updatedAt)} · ${useEmulators ? "test" : data.environment || "production"}${range}` : "Aggregate not published yet";
       $(`${q.id}-metrics`).textContent = "";
       $(`${q.id}-table`).hidden = true;
       charts[q.id]?.destroy();
@@ -349,7 +293,7 @@
       await Promise.all(QUESTIONS.map(async (q) => {
         if (q.phase) {
           show(q, null);
-          $(`${q.id}-updated`).textContent = "Sin métrica publicada todavía";
+          $(`${q.id}-updated`).textContent = "Metric not published yet";
           return;
         }
         try {
@@ -374,7 +318,7 @@
         ]);
         await load();
         const errors = results.flatMap((result,index) => result.status === "rejected" ?
-          [`${index === 0 ? "Team" : "BQ2/BQ3/BQ13"}: ${result.reason.message}`] : []);
+          [`${index === 0 ? "Team" : "BQ2/BQ3/BQ13/BQ14"}: ${result.reason.message}`] : []);
         $("status").textContent += errors.length ? ` · ${errors.join(" · ")}` : " · Aggregates refreshed";
       } catch (error) {
         $("status").textContent = `Refresh failed: ${error.message}`;
@@ -395,21 +339,21 @@
 
     $("sign-out").addEventListener("click", () => signOut(auth));
 
-// A Firebase session alone does not grant organization analytics access.
+// Every signed-in ParchApp account can read; only organization accounts refresh.
     onAuthStateChanged(auth, async (user) => {
       $("dashboard").hidden = true;
       $("refresh").hidden = true;
       let allowed = false;
       try { allowed = user ? (await user.getIdTokenResult()).claims.orgAnalytics === true : false; }
-      catch { $("status").textContent = "No se pudo verificar el acceso de la organización. Inicia sesión otra vez."; }
+      catch { $("status").textContent = "Organization refresh access could not be verified."; }
       if (auth.currentUser?.uid !== user?.uid) return;
       $("login").hidden = !!user;
-      $("dashboard").hidden = !allowed;
+      $("dashboard").hidden = !user;
       $("refresh").hidden = !allowed;
       $("sign-out").hidden = !user;
       $("who").textContent = user ? user.email : "";
-      $("status").textContent = user && !allowed ? "Esta cuenta no tiene acceso al dashboard de la organización. Solicita el permiso orgAnalytics al administrador y vuelve a iniciar sesión." : "";
-      if (allowed) load();
+      if (user) await load();
+      if (user && !allowed) $("status").textContent += " · Read-only dashboard access";
     });
 
     buildCards();

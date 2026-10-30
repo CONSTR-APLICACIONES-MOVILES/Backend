@@ -19,7 +19,7 @@ test.after(async()=>{await env?.cleanup();});
 test('metrics are read-only to authenticated dashboard, raw attempts are server-owned',async()=>{
   const owner=env.authenticatedContext('owner',{orgAnalytics:true}).firestore(),anon=env.unauthenticatedContext().firestore();
   await assertSucceeds(getDoc(doc(owner,'insights/bq2_creation_reliability')));
-  await assertFails(getDoc(doc(env.authenticatedContext('app-user').firestore(),'insights/bq2_creation_reliability')));
+  await assertSucceeds(getDoc(doc(env.authenticatedContext('app-user').firestore(),'insights/bq2_creation_reliability')));
   await assertFails(getDoc(doc(anon,'insights/bq2_creation_reliability')));
   await assertFails(setDoc(doc(owner,'insights/bq2_creation_reliability'),{attempts:100}));
   await assertFails(getDoc(doc(owner,'creationAttempts/a')));

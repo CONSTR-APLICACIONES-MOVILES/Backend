@@ -33,7 +33,7 @@ Object.assign(exports, createMobileCallables(new MobileService(getFirestore())))
 
 // Extends the same Firestore insights collection without replacing the team's
 // deployed BQ1/7/8/9 aggregator or its historical metric definitions.
-exports.refreshActivityInsights = onCall({region:'us-central1'}, async request => {
+exports.refreshActivityInsights = onCall({region:'us-central1', invoker:'public'}, async request => {
   requireOrganizationAnalytics(request);
   if (Object.keys(request.data || {}).length) throw new HttpsError('invalid-argument','No arguments accepted.');
   return require('./src/activityInsights').refreshActivityInsights(getFirestore());

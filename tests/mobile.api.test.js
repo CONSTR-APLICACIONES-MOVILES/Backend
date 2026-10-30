@@ -146,7 +146,8 @@ test("per-activity responses persist, are idempotent and appear in activity deta
   const details = await service.getActivity("organizer", {activityId: "a1"});
   assert.equal(details.participants.find((p) => p.id === "member").activityRsvpStatus, "accepted");
   assert.deepEqual((await db.doc("groups/g1").get()).data().goingIds, []);
-  await assert.rejects(call("respondToActivityInvitation", {id: "a1", response: "declined"}), {code: "failed-precondition"});
+  await call("respondToActivityInvitation", {id: "a1", response: "declined", expectedResponse:"accepted"});
+  assert.equal((await call("getAlerts")).alerts[0].response,"declined");
 });
 test("organizer reminder choice is stored and scheduled relative to the activity", async () => {
   const startTime = new Date(now.getTime() + 2 * 60 * 60 * 1000);
