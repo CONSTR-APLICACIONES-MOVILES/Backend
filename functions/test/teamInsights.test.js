@@ -40,8 +40,7 @@ test("without events the dashboard gets empty insights, not an error", () => {
   assert.equal(usage.least_used, null);
 });
 
-test("refresh reads the window and writes bq1, bq7, bq8 and bq9 without touching bq3", async () => {
-  const written = {};
+test("refresh reads the window and writes bq1, bq7, bq8, bq9 and bq11 without touching bq3", async () => {  const written = {};
   let since;
   let activitiesSince;
   const db = {
@@ -64,8 +63,10 @@ test("refresh reads the window and writes bq1, bq7, bq8 and bq9 without touching
   };
   const now = new Date("2026-10-29T12:00:00Z");
   const summary = await refreshTeamInsights(db, {now, extras: false});
-  assert.deepEqual(Object.keys(written).sort(), ["insights/bq1_engine_latency", "insights/bq7_creation_abandonment",
+  assert.deepEqual(Object.keys(written).sort(), ["insights/bq11_confirmed_activity_areas",
+    "insights/bq1_engine_latency", "insights/bq7_creation_abandonment",
     "insights/bq8_feature_usage", "insights/bq9_comparison_confirmation"]);
+  assert.equal(written["insights/bq11_confirmed_activity_areas"].total_confirmed, 1);
   assert.equal(written["insights/bq9_comparison_confirmation"].total_activities, 1);
   assert.equal(activitiesSince.toISOString(), "2026-09-29T12:00:00.000Z");
   assert.equal(written["insights/bq1_engine_latency"].total_events, 2);
