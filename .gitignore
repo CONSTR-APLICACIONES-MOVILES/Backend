@@ -16,3 +16,6 @@ service-account*.json
 # Isolated local metrics emulator configuration
 /firebase.development.local.json
 /firebase.integration.local.json
+
+# Local deployment configuration; preserve the currently deployed parameter.
+/functions/.env.parchapp-ee6cc

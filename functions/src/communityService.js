@@ -107,7 +107,7 @@ class CommunityService {
   async updatePresence(uid, input) {
     requireThat(statuses.includes(input.status) && scopes.includes(input.visibility), 'invalid-argument', 'Choose a status and visibility.');
     const expiry = new Date(input.expiresAt);
-    requireThat(typeof input.expiresAt === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(input.expiresAt) && Number.isFinite(expiry.getTime()) && expiry > this.clock() && expiry - this.clock() <= 24 * 3600000, 'invalid-argument', 'Status must expire within the next 24 hours.');
+    requireThat(typeof input.expiresAt === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/.test(input.expiresAt) && Number.isFinite(expiry.getTime()) && expiry > this.clock() && expiry - this.clock() <= 24 * 3600000, 'invalid-argument', 'Status must expire within the next 24 hours.');
     await this.db.doc(`profiles/${uid}`).set({status: input.status, statusExpiresAt: expiry, preferences: {statusVisibility: input.visibility}}, {merge: true});
     return {saved: true};
   }

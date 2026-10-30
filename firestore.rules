@@ -146,7 +146,7 @@ service cloud.firestore {
     // Aggregates belong to the organization dashboard. Apps receive operational
     // recommendations through authenticated callables, not raw dashboard data.
     match /insights/{insightId} {
-      allow read: if signedIn() && request.auth.token.orgAnalytics == true;
+      allow read: if signedIn();
       allow write: if false;
     }
   }

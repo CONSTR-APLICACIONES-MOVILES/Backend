@@ -16,8 +16,34 @@ async function recordActivityChange(db, id, before, after, version, eventTime) {
 }
 async function additionalAlerts(db,uid,groups,activities,now) {
   const authorized = new Map(groups.map(g=>[g.id,g.data()]));
-  const [events,invites] = await Promise.all([db.collection(`alertEvents/${uid}/items`).orderBy('createdAt','desc').limit(100).get(),db.collection(`groupInvitations/${uid}/items`).orderBy('expiresAt','desc').limit(100).get()]);
+  const [events,invites,requests,acceptedRequests] = await Promise.all([
+    db.collection(`alertEvents/${uid}/items`).orderBy('createdAt','desc').limit(100).get(),
+    db.collection(`groupInvitations/${uid}/items`).orderBy('expiresAt','desc').limit(100).get(),
+    db.collection('friendships').where('recipientId','==',uid).where('state','==','pending').limit(100).get(),
+    db.collection('friendships').where('requesterId','==',uid).where('state','==','accepted').limit(100).get(),
+  ]);
   const rows=[];
+  // The pending relationship is the source of truth, including requests created
+  // before this projection was deployed. No shared group or backfill is needed.
+  const people = requests.docs.length ? await db.getAll(...requests.docs.map(d => db.doc(`publicPeople/${d.data().requesterId}`))) : [];
+  requests.docs.forEach((doc,index) => {
+    const request=doc.data(), person=people[index].data();
+    if(request.recipientId!==uid || request.state!=='pending' || !request.version) return;
+    const name=person?.name || 'ParchApp user';
+    rows.push({id:`friend_${hash(`${doc.id}:${request.version}`)}`,kind:'friendRequest',
+      title:`${name} sent you a friend request`,description:person?.username?`@${person.username}`:'Review this friendship request.',
+      createdAt:iso(request.updatedAt || request.createdAt),requesterId:request.requesterId,
+      requesterName:name,requesterUsername:person?.username || null,friendshipVersion:request.version,
+      studySessionId:null});
+  });
+  const acceptedPeople = acceptedRequests.docs.length ? await db.getAll(...acceptedRequests.docs.map(d => db.doc(`publicPeople/${d.data().recipientId}`))) : [];
+  acceptedRequests.docs.forEach((doc,index) => {
+    const r=doc.data(), person=acceptedPeople[index].data();
+    rows.push({id:`friend_${hash(`${doc.id}:${r.version}:accepted`)}`,kind:'digest',
+      title:`${person?.name || 'ParchApp user'} accepted your friend request`,
+      description:person?.username ? `You are now friends with @${person.username}.` : 'You are now friends.',
+      createdAt:iso(r.updatedAt),studySessionId:null});
+  });
   for (const doc of events.docs) {
     const e=doc.data(), group=authorized.get(e.groupId);
     if (!group) continue;
