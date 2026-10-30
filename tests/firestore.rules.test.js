@@ -130,6 +130,22 @@ test("insights are read-only for signed-in users", async () => {
   await assertFails(setDoc(doc(as("alex"), "insights/bq3_slot_acceptance"), {recommended_position: 3}));
 });
 
+// the app can only add analytics events with the allowed fields, nobody reads or changes them
+test("analytics events are create-only for signed-in users", async () => {
+  const event = (extra = {}) => ({name: "feature_used", params: {feature: "groups"},
+    user_hash: "0123456789abcdef0123456789abcdef", created_at: serverTimestamp(), ...extra});
+  const events = collection(as("alex"), "analyticsEvents");
+  await assertSucceeds(setDoc(doc(events, "e1"), event()));
+  await assertSucceeds(setDoc(doc(events, "e2"), event({user_hash: null})));
+  await assertFails(setDoc(doc(collection(anonymous(), "analyticsEvents"), "e3"), event()));
+  await assertFails(setDoc(doc(events, "e4"), event({email: "a.va@test.com"})));
+  await assertFails(setDoc(doc(events, "e5"), event({user_hash: "real-firebase-uid"})));
+  await assertFails(setDoc(doc(events, "e6"), event({created_at: new Date("2020-01-01")})));
+  await assertFails(getDoc(doc(events, "e1")));
+  await assertFails(updateDoc(doc(events, "e1"), {name: "other"}));
+  await assertFails(deleteDoc(doc(events, "e1")));
+});
+
 test("campus areas are reference data: signed-in users read, nobody writes", async () => {
   await env.withSecurityRulesDisabled(async (context) => {
     await setDoc(doc(context.firestore(), "campusAreas/central_library"),

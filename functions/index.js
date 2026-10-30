@@ -3,13 +3,13 @@ const {getFirestore, FieldValue} = require("firebase-admin/firestore");
 const {onSchedule} = require("firebase-functions/v2/scheduler");
 const {onDocumentCreated, onDocumentWritten} = require("firebase-functions/v2/firestore");
 const {onCall, HttpsError} = require("firebase-functions/v2/https");
+const {defineString} = require("firebase-functions/params");
 const functionsV1 = require("firebase-functions/v1");
 const logger = require("firebase-functions/logger");
+const {BigQuery} = require("@google-cloud/bigquery");
 
 const {joinDemoGroups} = require("./src/groupMembership");
-const {loadQuery, buildRecommendationInsight, buildResponseTimeInsight,
-  buildReminderTimingInsight} = require("./src/insights");
-const {buildRecommendationInsight} = require("./src/insights");
+const {loadQuery, buildRecommendationInsight, buildReminderTimingInsight} = require("./src/insights");
 const {refreshTeamInsights} = require('./src/teamInsights');
 const {refreshResponseTimeInsight} = require('./src/responseTimeInsights');
 const {refreshCoordinationInsight, recordFirstConfirmation} = require('./src/coordinationInsights');
@@ -19,6 +19,9 @@ const {createActivityCallables} = require("./src/activityCallables");
 const {dispatchPendingReminders} = require("./src/reminderService");
 
 initializeApp();
+
+// bq6 reads the analytics export in bigquery, the dataset name comes from functions/.env
+const analyticsDataset = defineString("ANALYTICS_DATASET");
 
 const activityRepository = new ActivityRepository(getFirestore());
 const activityService = new ActivityService(activityRepository);

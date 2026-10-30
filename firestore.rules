@@ -109,8 +109,21 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // the app writes one document per event for the team dashboard, it can not read, edit or delete them
+    // only the name, the params, the sha256 hash of the user and the server time are accepted
     match /analyticsEvents/{eventId} {
-      allow read, write: if false;
+      allow read, update, delete: if false;
+      allow create: if signedIn()
+          && request.resource.data.keys().hasOnly(['name', 'params', 'user_hash', 'created_at'])
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 40
+          && request.resource.data.params is map
+          && request.resource.data.params.size() <= 25
+          && (!('user_hash' in request.resource.data)
+              || request.resource.data.user_hash == null
+              || (request.resource.data.user_hash is string && request.resource.data.user_hash.size() == 32))
+          && request.resource.data.created_at == request.time;
     }
 
     // Reference data written by the seed script: where activities can happen, with coordinates.
@@ -120,6 +133,7 @@ service cloud.firestore {
     }
 
     // Written by the scheduled BQ3 function; read by both apps (feature F2, "Recommended" slot).
+    // the team dashboard also reads it after the user signs in, only the functions write it
     match /insights/{insightId} {
       allow read: if signedIn();
       allow write: if false;
