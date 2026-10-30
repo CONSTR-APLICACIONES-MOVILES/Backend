@@ -230,7 +230,7 @@
 
 // draws the empty cards once, then every load only fills them
     function buildCards() {
-      $("cards").innerHTML = QUESTIONS.map((q) => `
+      $("cards").innerHTML = [...QUESTIONS].sort(compareQuestionIds).map((q) => `
         <article class="card" id="card-${q.id}">
           <div class="top"><span class="badge">${q.id.toUpperCase()}</span><span class="badge type">${q.type}</span><span class="badge test" id="${q.id}-test" hidden>Test data</span></div>
           <h2>${q.question}</h2>
