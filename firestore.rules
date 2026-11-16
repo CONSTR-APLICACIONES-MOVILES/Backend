@@ -32,9 +32,21 @@ service cloud.firestore {
           );
     }
 
-    // =========================================================
-    // GROUPS
-    // =========================================================
+    function validPlanningContext(data) {
+      return !('planningContext' in data)
+          || (data.planningContext is map
+              && (!('groupSizeAtCreation' in data.planningContext)
+                  || data.planningContext.groupSizeAtCreation is int)
+              && (!('comparisonUsed' in data.planningContext)
+                  || data.planningContext.comparisonUsed is bool)
+              && (!('comparisonId' in data.planningContext)
+                  || data.planningContext.comparisonId is string
+                  || data.planningContext.comparisonId == null)
+              && (!('locationAreaId' in data.planningContext)
+                  || data.planningContext.locationAreaId is string)
+              && (!('timeBucket' in data.planningContext)
+                  || data.planningContext.timeBucket is string));
+    }
 
     match /groups/{groupId} {
 
@@ -197,36 +209,18 @@ service cloud.firestore {
           && request.resource.data.title is string
           && request.resource.data.title.size() > 0
           && request.resource.data.title.size() <= 120
-          && validDescription(request.resource.data)
-          && request.resource.data.keys().hasOnly([
-            'groupId',
-            'title',
-            'description',
-            'category',
-            'date',
-            'time',
-            'location',
-            'status',
-            'createdBy',
-            'createdAt'
-          ]);
+           && validDescription(request.resource.data)
+           && validPlanningContext(request.resource.data)
+           && request.resource.data.keys().hasOnly(
+                ['groupId', 'title', 'description', 'category', 'date', 'time', 'location', 'status', 'createdBy', 'createdAt', 'planningContext']);
 
       // Only the organiser may confirm or edit their activity;
       // groupId and createdBy never change.
       allow update: if signedIn()
           && resource.data.createdBy == request.auth.uid
-          && request.resource.data
-              .diff(resource.data)
-              .affectedKeys()
-              .hasOnly([
-                'title',
-                'description',
-                'category',
-                'date',
-                'time',
-                'location',
-                'status'
-              ])
+          && resource.data.get('cancelled', false) == false
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['title', 'description', 'category', 'date', 'time', 'location', 'status'])
           && validDescription(request.resource.data)
 
           // Canonical schedules must stay consistent with
@@ -261,12 +255,55 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // =========================================================
-    // INSIGHTS
-    // =========================================================
+    // These records are backend-owned projections. Mobile clients use callable APIs.
+    match /activities/{activityId}/lifecycle/{eventId} {
+      allow read, write: if false;
+    }
 
-    // Written by the scheduled BQ3 function.
-    // Read by signed-in clients.
+    match /inboxes/{userId}/items/{activityId} {
+      allow read, write: if false;
+    }
+
+    match /inboxes/{userId}/items/{activityId}/reminders/{reminderId} {
+      allow read, write: if false;
+    }
+
+    // the app writes one document per event for the team dashboard, it can not read, edit or delete them
+    // only the name, the params, the sha256 hash of the user and the server time are accepted
+    match /analyticsEvents/{eventId} {
+      allow read, update, delete: if false;
+      allow create: if signedIn()
+          && request.resource.data.keys().hasOnly(['name', 'params', 'user_hash', 'created_at'])
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 40
+          && request.resource.data.params is map
+          && request.resource.data.params.size() <= 25
+          && (!('user_hash' in request.resource.data)
+              || request.resource.data.user_hash == null
+              || (request.resource.data.user_hash is string && request.resource.data.user_hash.size() == 32))
+          && request.resource.data.created_at == request.time;
+    }
+
+    // BQ2 observations are validated and deduplicated by recordCreationAttempt.
+    match /creationAttempts/{attemptId} {
+      allow read, write: if false;
+    }
+    // Public-minimal DTOs and relationship commands are served through callables.
+    match /usernames/{name} { allow read, write: if false; }
+    match /publicPeople/{uid} { allow read, write: if false; }
+    match /friendships/{pairId} { allow read, write: if false; }
+    match /reminderMeasurements/{activityId} { allow read, write: if false; }
+    match /reminderDeliveries/{deliveryId} { allow read, write: if false; }
+
+    // Reference data written by the seed script: where activities can happen, with coordinates.
+    match /campusAreas/{areaId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    // Aggregates belong to the organization dashboard. Apps receive operational
+    // recommendations through authenticated callables, not raw dashboard data.
     match /insights/{insightId} {
       allow read: if signedIn();
       allow write: if false;

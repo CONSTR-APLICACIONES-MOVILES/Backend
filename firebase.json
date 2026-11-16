@@ -3,18 +3,25 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
+  "hosting": {
+    "public": "dashboard",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "headers": [
+      {"source": "**/*.@(html|js|mjs)", "headers": [{"key": "Cache-Control", "value": "no-cache"}]}
+    ]
+  },
   "functions": [
     {
       "source": "functions",
       "codebase": "default",
-      "ignore": ["node_modules", ".git", "test", "scripts", "*.log"]
+      "ignore": ["node_modules", ".git", "test", "scripts", "tmp", "*.log"]
     }
   ],
   "emulators": {
-    "auth": {"port": 9099},
-    "firestore": {"port": 8080},
-    "functions": {"port": 5001},
-    "ui": {"enabled": true, "port": 4000},
-    "singleProjectMode": true
+    "auth": {"host": "0.0.0.0", "port": 9099},
+    "firestore": {"host": "0.0.0.0", "port": 8080},
+    "functions": {"host": "0.0.0.0", "port": 5001},
+    "ui": {"enabled": true, "host": "0.0.0.0", "port": 4000},
+    "singleProjectMode": false
   }
 }

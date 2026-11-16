@@ -92,4 +92,39 @@ function memberForAccount(uid, email, displayName) {
   return {id: uid, name, initials, preferredStart: 18 * 60, preferredEnd: 21 * 60, busy: []};
 }
 
-module.exports = {DEMO_USER_ID, demoGroups, memberForAccount};
+/*
+  Busy blocks of a demo member on a given date (YYYY-MM-DD). Weekdays reuse the member's
+  schedule shifted by 0, 30 or 60 minutes so each day looks different; weekends are free.
+  Port of DemoData.busyOn in the Android app: keep both in sync.
+ */
+function demoBusyOn(member, date) {
+  const weekday = new Date(`${date}T12:00:00Z`).getUTCDay(); // 0 = Sunday
+  if (weekday === 0 || weekday === 6) {
+    return [];
+  }
+  const shift = ((weekday - 1) % 3) * 30;
+  return member.busy
+      .map((b) => ({start: Math.min(1440, b.start + shift), end: Math.min(1440, b.end + shift)}))
+      .filter((b) => b.start < b.end);
+}
+
+/* availability/{uid}/days/{date} documents for every demo member, starting at startDate. */
+function demoAvailability(startDate, days) {
+  const members = new Map();
+  for (const group of Object.values(demoGroups())) {
+    for (const member of group.members) {
+      members.set(member.id, member);
+    }
+  }
+  const start = Date.parse(`${startDate}T12:00:00Z`);
+  const docs = [];
+  for (let i = 0; i < days; i++) {
+    const date = new Date(start + i * 86_400_000).toISOString().slice(0, 10);
+    for (const member of members.values()) {
+      docs.push({uid: member.id, date, busy: demoBusyOn(member, date)});
+    }
+  }
+  return docs;
+}
+
+module.exports = {DEMO_USER_ID, demoGroups, memberForAccount, demoBusyOn, demoAvailability};

@@ -1,0 +1,46 @@
+{
+  "checkedAt": "2026-10-29T23:01:53.669Z",
+  "project": "parchapp-ee6cc",
+  "androidPackage": "com.example.parchapp",
+  "registerCertificates": [
+    {
+      "certType": "SHA_1",
+      "shaHash": "2E318395E9F6B55BD5B70F201BDE7241A27DC0D7"
+    },
+    {
+      "certType": "SHA_256",
+      "shaHash": "741EBD5165EDC732EEA2DE4ABF258CFBDCFC3E9D143CBDA762A797DDDA257B09"
+    }
+  ],
+  "enableServices": [
+    "maps-android-backend.googleapis.com",
+    "places.googleapis.com"
+  ],
+  "keyId": "parchapp-android-maps",
+  "restrictions": {
+    "androidKeyRestrictions": {
+      "allowedApplications": [
+        {
+          "packageName": "com.example.parchapp",
+          "sha1Fingerprint": "2E318395E9F6B55BD5B70F201BDE7241A27DC0D7"
+        },
+        {
+          "packageName": "com.example.parchapp",
+          "sha1Fingerprint": "6332F769D4B570EFE03CF600F9F6114DE603B573"
+        }
+      ]
+    },
+    "apiTargets": [
+      {
+        "service": "maps-android-backend.googleapis.com"
+      },
+      {
+        "service": "places.googleapis.com"
+      }
+    ]
+  },
+  "keyResource": "projects/718308941728/locations/global/keys/parchapp-android-maps",
+  "localKeyFile": "android/maps.properties (ignored)",
+  "firebaseConfigRefreshed": true,
+  "oauthCertificatePresent": true
+}

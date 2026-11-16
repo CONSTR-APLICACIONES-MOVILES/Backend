@@ -2,6 +2,10 @@
 
 This is the contract between the backend and both clients, the Android app ([Sprint-2-Java](https://github.com/CONSTR-APLICACIONES-MOVILES/Sprint-2-Java)) and the Flutter app. Both apps must read and write exactly these fields. `firestore.rules` rejects anything else.
 
+Additive dated availability, private profiles and per-activity inbox responses
+are documented in [the mobile API contract](mobile-api.md). Legacy group arrays
+and existing activity commands retain their original behavior.
+
 Times of day are **minutes since midnight** (`1110` = 6:30 PM). Calendars are stored only as free/busy blocks, never event titles, places or attendees (data minimisation, Sprint 1 scenario 9.5).
 
 ## `groups/{groupId}`
@@ -100,8 +104,18 @@ Created by clients with an auto-generated ID.
 | `createdAt` | timestamp | Must be `FieldValue.serverTimestamp()` |
 | `startTime`, `endTime` | timestamp, optional | Backend-managed canonical schedule; callable DTOs serialize these as UTC ISO strings |
 | `durationMinutes` | integer, optional | Backend-managed duration (15–720 minutes) |
+| `confirmedAt` | timestamp, optional | Backend-managed first transition to `CONFIRMED` |
+| `planningContext` | map, optional | Immutable, coarse planning dimensions used by analytics |
+| `reminderMinutesBefore` | integer, optional | Organizer preference, 0 (disabled), 15, 30 or 60; changed only through `setActivityReminder` |
 
 Clients may create the original fields plus `description`. Only the author can edit, confirm or delete an activity, and `groupId`/`createdBy` never change. Canonical schedule fields can only be written through the recommendation decision callables. After those fields exist, direct client edits of `date`/`time` are rejected to prevent inconsistent schedules. Legacy activities remain readable without a migration. **Queries must filter by `groupId`**, otherwise the rules reject them:
+
+`planningContext` contains `groupSizeAtCreation`, `minimumNoticeMinutes`, `comparisonUsed`, `comparisonId`, `locationAreaId` and `timeBucket`. Location areas are coarse identifiers such as `central_library`, `mario_laserna`, `campus_north`, `campus_south`, `outside_campus` and `unknown`; exact coordinates are not stored for analytics.
+
+Every backend-created activity also receives an immutable lifecycle projection at
+`activities/{activityId}/lifecycle/{eventId}`. Mobile clients cannot read or write this
+projection directly. Event types are `CREATED`, `INVITATION_SENT`, `RESPONSE_RECEIVED`,
+`CONFIRMED`, `CANCELLED` and `UPDATED`.
 
 ```dart
 db.collection('activities').where('groupId', isEqualTo: groupId).orderBy('createdAt', descending: true);
@@ -148,6 +162,61 @@ records first presented within the preceding 30 days. Clients can read it but no
 
 If the document is missing or can't be read, clients should use position `0`, as `FirestoreInsightsRepository` does.
 
+## `insights/bq5_response_time`
+
+Written every night by `refreshResponseTimeInsight`. Clients can read it but not write it.
+
+| Field | Type | Notes |
+|---|---|---|
+| `by_group_size` | array | One entry per group size, see below |
+| `invitations` | number | Invitations with at least one answer in the last 30 days |
+| `completed` | number | Invitations that everyone answered |
+| `min_completed`, `min_responses` | number | Thresholds used to choose the estimate |
+| `updated_at` | timestamp | |
+
+Each entry in `by_group_size`: `group_size`, `invitations`, `completed`, `pct_completed`, `avg_minutes_all_responded`, `median_minutes_all_responded`, `responses`, `avg_minutes_per_response`, and the two fields the apps show:
+
+| Field | Type | Notes |
+|---|---|---|
+| `estimate_minutes` | number or null | Expected minutes. `null` means there is not enough data, so show nothing |
+| `estimate_kind` | string or null | `all_responded`: time until everyone answers. `per_response`: time one member usually takes, used while few invitations are complete |
+
+If the document is missing or can't be read, clients show no estimate.
+
+## `insights/bq6_reminder_timing`
+
+`refreshReminderTimingInsight` updates this document daily from BQ6 Analytics events. New scheduled invitations use the published delay for most participants and keep a small deterministic exploration cohort on the other supported delays, so the comparison continues to learn without sending extra reminders.
+
+| Field | Type | Notes |
+|---|---|---|
+| `recommended_delay_minutes` | number | Delay after invitation before the single RSVP reminder; supported arms are 30, 60 and 120 minutes; defaults to 60 until a delay has enough data |
+| `recommended_strategy` | string | Strategy name corresponding to the selected delay |
+| `recommendation_ready` | boolean | True after at least 20 delivered RSVP reminders and one response exist for a delay |
+| `sample_size` | number | Delivered RSVP reminders in the 30-day window |
+| `min_reminders_per_delay` | number | Minimum denominator required to select a delay |
+| `by_delay` | array | Per delay: `delay_minutes`, `reminders`, `responses_after_reminder`, `response_rate_pct`, `avg_response_minutes` |
+| `updated_at` | timestamp | |
+
+If the document is unavailable or no arm has enough data, new invitations use the 60-minute default. If the activity starts within 30 minutes, no RSVP reminder is scheduled.
+
+## Activity inbox and reminders
+
+`inboxes/{uid}/items/{activityId}` is the backend-owned per-participant response record.
+It contains `invitedAt`, `response`, `respondedAt`, `responseMs`,
+`availabilityAtInvitation` (`AVAILABLE`, `BUSY` or `UNKNOWN`), `reminderCount`,
+`lastReminderAt` and `lastReminderStrategy`. The availability value is a snapshot taken
+when the invitation is created; it never contains calendar titles or locations.
+
+Scheduled in-app reminders live at
+`inboxes/{uid}/items/{activityId}/reminders/{reminderId}`. They contain `strategy`,
+`sequence`, `delayMinutes`, `scheduledAt`, `sentAt`, `deliveredAt`, `openedAt`, `respondedAt` and
+`status` (`SCHEDULED`, `SENT`, `OPENED`, `RESPONDED`, `EXPIRED` or `CANCELLED`).
+The `dispatchPendingReminders` function marks due reminders as sent and creates an
+in-app alert. A response cancels the reminder on the next dispatch pass.
+
+**RSVPs restart with each activity.** `resetRsvpOnNewActivity` empties `goingIds` and `maybeIds` of the group when an activity is created, because a new activity is a new invitation (BQ5).
+
+
 ## Analytics events
 
 The events below are Firebase Analytics events. BQ1/BQ8 keep their existing client
@@ -163,5 +232,18 @@ recommendation IDs do not establish a BQ3 denominator.
 | `slot_accepted` | `recommendation_id`, `slot_position`, `modified` (0/1); existing `group_size`/`recommended_position` may remain | Optional BQ3 decision mirror |
 | `feature_used` | `feature` (`groups`, `compare_availability`, `schedule`, `invitations`, `alerts`), `screen` | BQ8 |
 | `activity_created` | `category`, `source` | |
+| `rsvp_submitted` | `activity_id` (string), `group_size` (int), `response_ms` (int), `response` (`going`/`maybe`) | BQ5 |
+| `activity_create_attempt` | `creation_session_id`, `source`, `group_size` | BQ2 |
+| `activity_create_result` | `creation_session_id`, `result`, `duration_ms`, optional `error_code`, `activity_id` | BQ2 |
+| `invitation_sent` | `activity_id`, `availability_at_invitation` | BQ4 |
+| `reminder_sent` | `activity_id`, `reminder_id`, `reminder_purpose`, `strategy`, `sequence`, `delay_minutes`, `reminder_sent_at_ms` | BQ6/BQ14 |
+| `response_after_reminder` | `activity_id`, `reminder_id`, `strategy`, `sequence`, `delay_minutes`, `response_delay_ms`, `response_at_ms` | BQ6/BQ14 |
+| `creation_step_viewed` | `creation_session_id`, `step` | BQ7 |
+| `creation_step_completed` | `creation_session_id`, `step` | BQ7 |
+| `creation_abandoned` | `creation_session_id`, `last_step`, `duration_ms` | BQ7 |
+| `comparison_started` | `comparison_id`, `group_size` | BQ9 |
+| `activity_confirmed` | `activity_id`, `category`, `group_size`, `time_bucket`, `location_area_id` | BQ9-BQ12 |
 
 Every event also carries `client_ts` (ms). User IDs are sent as a SHA-256 hash (first 16 bytes, hex), never the raw UID.
+
+`rsvp_submitted` is logged by the person who answers, right after the RSVP is saved. `activity_id` is the latest activity of the group (`activities where groupId == X orderBy createdAt desc limit 1`), `group_size` is `members.length` and `response_ms` is now minus that activity's `createdAt`. Skip the event when the group has no activity yet.

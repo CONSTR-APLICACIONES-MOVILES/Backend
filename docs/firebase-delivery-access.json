@@ -1,0 +1,31 @@
+{
+  "checkedAt": "2026-10-29T22:00:29.183Z",
+  "project": "parchapp-ee6cc",
+  "hosting": {
+    "http": 200,
+    "sites": [
+      {
+        "name": "projects/parchapp-ee6cc/sites/parchapp-ee6cc",
+        "url": "https://parchapp-ee6cc.web.app",
+        "http": 200,
+        "isParchApp": true,
+        "hasBq9": false,
+        "insightDocuments": [
+          "bq1_engine_latency",
+          "bq3_slot_acceptance",
+          "bq8_feature_usage"
+        ]
+      }
+    ]
+  },
+  "distribution": {
+    "groupsHttp": 404,
+    "groupCount": 0,
+    "releasesHttp": 404,
+    "releases": []
+  },
+  "limits": [
+    "HTTP reachability does not prove authenticated dashboard access.",
+    "No tester identities read; course TA roster not checked."
+  ]
+}

@@ -1,0 +1,373 @@
+[
+  {
+    "name": "acceptActivityRecommendation",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "activityChangesToInbox",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": false,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "cancelActivity",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "createGroup",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "createShareLink",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "discover",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "dispatchPendingReminders",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": false,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "exportActivityCalendar",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "getActivities",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "getActivity",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "getActivityMaterials",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "getActivityRecommendationAnalytics",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "getActivityRecommendations",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "getAlerts",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "getCalendarImportStatus",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "getCommunityPeers",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "getCoordinationInsight",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": null
+  },
+  {
+    "name": "getGroupDetails",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "getGroupInvitations",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "getProfile",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "getScheduleDay",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "getScheduleFriends",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "getShareLinks",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "getSharedProfile",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "importCalendarAvailability",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "joinSharedGroup",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "markAlertsRead",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "markNotificationEventsRead",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "modifyActivityRecommendation",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "prepareProposalComparison",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": null
+  },
+  {
+    "name": "presentActivityRecommendations",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "publishActivity",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": null
+  },
+  {
+    "name": "recordFirstActivityConfirmation",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": false,
+    "analyticsDataset": null
+  },
+  {
+    "name": "refreshCoordinationInsight",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": false,
+    "analyticsDataset": null
+  },
+  {
+    "name": "refreshResponseTimeInsight",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": false,
+    "analyticsDataset": null
+  },
+  {
+    "name": "refreshSlotRecommendation",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": false,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "refreshTeamInsights",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": null
+  },
+  {
+    "name": "refreshTeamInsightsNightly",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": false,
+    "analyticsDataset": null
+  },
+  {
+    "name": "resetRsvpOnNewActivity",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": false,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "resolveShareLink",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "respondGroupInvitation",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "respondToActivityInvitation",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "revokeGroupInvitation",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "revokeShareLink",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "saveActivityMaterials",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "setActivityReminder",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "setTopicCompletion",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "updateActivityDetails",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": null
+  },
+  {
+    "name": "updatePreferences",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "updatePresence",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "updateProfile",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": "analytics_000"
+  },
+  {
+    "name": "validatePlanningSlot",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": true,
+    "analyticsDataset": null
+  },
+  {
+    "name": "joinDemoGroupsOnSignUp",
+    "region": "us-central1",
+    "state": "ACTIVE",
+    "callable": false,
+    "analyticsDataset": "analytics_000"
+  }
+]

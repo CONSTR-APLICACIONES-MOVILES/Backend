@@ -1,0 +1,64 @@
+[
+  {
+    "id": "publishActivity",
+    "source": {
+      "storageSource": {
+        "bucket": "gcf-v2-sources-718308941728-us-central1",
+        "object": "publishActivity/function-source.zip",
+        "generation": "1793302051512477"
+      }
+    },
+    "serviceAccount": "718308941728-compute@developer.gserviceaccount.com",
+    "environmentVariables": {
+      "ANALYTICS_DATASET": "analytics_000",
+      "FIREBASE_CONFIG": "{\"projectId\":\"parchapp-ee6cc\",\"storageBucket\":\"parchapp-ee6cc.firebasestorage.app\"}",
+      "GCLOUD_PROJECT": "parchapp-ee6cc",
+      "EVENTARC_CLOUD_EVENT_SOURCE": "projects/parchapp-ee6cc/locations/us-central1/services/publishActivity",
+      "FUNCTION_REGION": "us-central1",
+      "FUNCTION_TARGET": "publishActivity",
+      "LOG_EXECUTION_ID": "true",
+      "FUNCTION_SIGNATURE_TYPE": "http"
+    }
+  },
+  {
+    "id": "refreshTeamInsights",
+    "source": {
+      "storageSource": {
+        "bucket": "gcf-v2-sources-718308941728-us-central1",
+        "object": "refreshTeamInsights/function-source.zip",
+        "generation": "1793305569999529"
+      }
+    },
+    "serviceAccount": "718308941728-compute@developer.gserviceaccount.com",
+    "environmentVariables": {
+      "ANALYTICS_DATASET": "analytics_PROPERTY_ID",
+      "FIREBASE_CONFIG": "{\"projectId\":\"parchapp-ee6cc\",\"storageBucket\":\"parchapp-ee6cc.firebasestorage.app\"}",
+      "GCLOUD_PROJECT": "parchapp-ee6cc",
+      "EVENTARC_CLOUD_EVENT_SOURCE": "projects/parchapp-ee6cc/locations/us-central1/services/refreshTeamInsights",
+      "FUNCTION_REGION": "us-central1",
+      "FUNCTION_TARGET": "refreshTeamInsights",
+      "LOG_EXECUTION_ID": "true",
+      "FUNCTION_SIGNATURE_TYPE": "http"
+    }
+  },
+  {
+    "id": "refreshTeamInsightsNightly",
+    "source": {
+      "storageSource": {
+        "bucket": "gcf-v2-sources-718308941728-us-central1",
+        "object": "refreshTeamInsightsNightly/function-source.zip",
+        "generation": "1793305509800473"
+      }
+    },
+    "serviceAccount": "718308941728-compute@developer.gserviceaccount.com",
+    "environmentVariables": {
+      "ANALYTICS_DATASET": "analytics_PROPERTY_ID",
+      "FIREBASE_CONFIG": "{\"projectId\":\"parchapp-ee6cc\",\"storageBucket\":\"parchapp-ee6cc.firebasestorage.app\"}",
+      "GCLOUD_PROJECT": "parchapp-ee6cc",
+      "EVENTARC_CLOUD_EVENT_SOURCE": "projects/parchapp-ee6cc/locations/us-central1/services/refreshTeamInsightsNightly",
+      "FUNCTION_REGION": "us-central1",
+      "FUNCTION_TARGET": "refreshTeamInsightsNightly",
+      "LOG_EXECUTION_ID": "true"
+    }
+  }
+]

@@ -1,0 +1,223 @@
+{
+  "checkedAt": "2026-10-29T22:32:22.227Z",
+  "project": "parchapp-ee6cc",
+  "googleProvider": {
+    "http": 200,
+    "enabled": true,
+    "clientId": "718308941728-i9lkar62kc4a6j8mv2mlfcd9tlkmip91.apps.googleusercontent.com"
+  },
+  "apiKeys": {
+    "http": 200,
+    "keys": [
+      {
+        "name": "projects/718308941728/locations/global/keys/3bd46ad1-64b5-40bb-a6b9-498e65634e58",
+        "displayName": "parchapp Routes key",
+        "restrictions": {
+          "apiTargets": [
+            {
+              "service": "routes.googleapis.com"
+            }
+          ]
+        }
+      },
+      {
+        "name": "projects/718308941728/locations/global/keys/1e6806cc-17c8-489b-8e34-8ae8219e66a5",
+        "displayName": "Android key (auto created by Firebase)",
+        "restrictions": {
+          "androidKeyRestrictions": {},
+          "apiTargets": [
+            {
+              "service": "firebasedatabase.googleapis.com"
+            },
+            {
+              "service": "firebasehosting.googleapis.com"
+            },
+            {
+              "service": "firebaserules.googleapis.com"
+            },
+            {
+              "service": "sqladmin.googleapis.com"
+            },
+            {
+              "service": "cloudconfig.googleapis.com"
+            },
+            {
+              "service": "datastore.googleapis.com"
+            },
+            {
+              "service": "fcmregistrations.googleapis.com"
+            },
+            {
+              "service": "firebase.googleapis.com"
+            },
+            {
+              "service": "firebaseappcheck.googleapis.com"
+            },
+            {
+              "service": "firebaseappdistribution.googleapis.com"
+            },
+            {
+              "service": "firebaseapphosting.googleapis.com"
+            },
+            {
+              "service": "firebaseapptesters.googleapis.com"
+            },
+            {
+              "service": "firebasedataconnect.googleapis.com"
+            },
+            {
+              "service": "firebaseinappmessaging.googleapis.com"
+            },
+            {
+              "service": "firebaseinstallations.googleapis.com"
+            },
+            {
+              "service": "firebaseml.googleapis.com"
+            },
+            {
+              "service": "firebaseremoteconfig.googleapis.com"
+            },
+            {
+              "service": "firebaseremoteconfigrealtime.googleapis.com"
+            },
+            {
+              "service": "firebasestorage.googleapis.com"
+            },
+            {
+              "service": "firebasevertexai.googleapis.com"
+            },
+            {
+              "service": "firestore.googleapis.com"
+            },
+            {
+              "service": "identitytoolkit.googleapis.com"
+            },
+            {
+              "service": "logging.googleapis.com"
+            },
+            {
+              "service": "mlkit.googleapis.com"
+            },
+            {
+              "service": "play.googleapis.com"
+            },
+            {
+              "service": "securetoken.googleapis.com"
+            },
+            {
+              "service": "fpnv.googleapis.com"
+            }
+          ]
+        }
+      },
+      {
+        "name": "projects/718308941728/locations/global/keys/354a6a35-5258-4395-b7af-8da3d869f8d3",
+        "displayName": "Browser key (auto created by Firebase)",
+        "restrictions": {
+          "browserKeyRestrictions": {},
+          "apiTargets": [
+            {
+              "service": "firebasedatabase.googleapis.com"
+            },
+            {
+              "service": "firebasehosting.googleapis.com"
+            },
+            {
+              "service": "firebaserules.googleapis.com"
+            },
+            {
+              "service": "sqladmin.googleapis.com"
+            },
+            {
+              "service": "cloudconfig.googleapis.com"
+            },
+            {
+              "service": "datastore.googleapis.com"
+            },
+            {
+              "service": "fcmregistrations.googleapis.com"
+            },
+            {
+              "service": "firebase.googleapis.com"
+            },
+            {
+              "service": "firebaseappcheck.googleapis.com"
+            },
+            {
+              "service": "firebaseappdistribution.googleapis.com"
+            },
+            {
+              "service": "firebaseapphosting.googleapis.com"
+            },
+            {
+              "service": "firebaseapptesters.googleapis.com"
+            },
+            {
+              "service": "firebasedataconnect.googleapis.com"
+            },
+            {
+              "service": "firebaseinappmessaging.googleapis.com"
+            },
+            {
+              "service": "firebaseinstallations.googleapis.com"
+            },
+            {
+              "service": "firebaseml.googleapis.com"
+            },
+            {
+              "service": "firebaseremoteconfig.googleapis.com"
+            },
+            {
+              "service": "firebaseremoteconfigrealtime.googleapis.com"
+            },
+            {
+              "service": "firebasestorage.googleapis.com"
+            },
+            {
+              "service": "firebasevertexai.googleapis.com"
+            },
+            {
+              "service": "firestore.googleapis.com"
+            },
+            {
+              "service": "identitytoolkit.googleapis.com"
+            },
+            {
+              "service": "logging.googleapis.com"
+            },
+            {
+              "service": "mlkit.googleapis.com"
+            },
+            {
+              "service": "play.googleapis.com"
+            },
+            {
+              "service": "securetoken.googleapis.com"
+            },
+            {
+              "service": "fpnv.googleapis.com"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "mapsServices": {
+    "http": 200,
+    "enabled": [],
+    "more": false
+  },
+  "androidCertificates": {
+    "http": 200,
+    "certificates": [
+      {
+        "type": "SHA_1",
+        "hash": "6332f769d4b570efe03cf600f9f6114de603b573"
+      },
+      {
+        "type": "SHA_256",
+        "hash": "3ce8b2ce242285d83a56ab6cea2334b69507879948d40cae29ebb5453de173a9"
+      }
+    ]
+  }
+}

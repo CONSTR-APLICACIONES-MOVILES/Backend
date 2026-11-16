@@ -1,0 +1,74 @@
+{
+  "direct": {
+    "requestId": "contract-direct",
+    "groupId": "g",
+    "measurementVersion": 1,
+    "fields": {
+      "title": "Contract direct",
+      "description": "",
+      "category": "study",
+      "location": "",
+      "status": "PROPOSED",
+      "date": "",
+      "time": ""
+    },
+    "timeZone": "America/Bogota"
+  },
+  "compared": {
+    "requestId": "contract-compared",
+    "groupId": "g",
+    "measurementVersion": 1,
+    "fields": {
+      "title": "Contract compared",
+      "description": "",
+      "category": "study",
+      "location": "",
+      "status": "PROPOSED",
+      "date": "",
+      "time": ""
+    },
+    "timeZone": "America/Bogota",
+    "comparisonEvidenceId": "contract-evidence",
+    "participantIds": [
+      "owner",
+      "peer"
+    ]
+  },
+  "scheduled": {
+    "requestId": "contract-scheduled",
+    "groupId": "g",
+    "measurementVersion": 1,
+    "fields": {
+      "title": "Contract scheduled",
+      "description": "",
+      "category": "study",
+      "location": "",
+      "status": "PROPOSED",
+      "date": "",
+      "time": ""
+    },
+    "startTime": "2026-10-29T16:00:00.000Z",
+    "endTime": "2026-10-29T17:00:00.000Z",
+    "timeZone": "America/Bogota",
+    "comparisonEvidenceId": "slot-evidence",
+    "participantIds": [
+      "owner",
+      "peer"
+    ],
+    "comparisonId": "slot-comparison"
+  },
+  "legacy": {
+    "requestId": "contract-legacy",
+    "groupId": "g",
+    "fields": {
+      "title": "Contract legacy",
+      "description": "",
+      "category": "study",
+      "location": "",
+      "status": "PROPOSED",
+      "date": "",
+      "time": ""
+    },
+    "timeZone": "America/Bogota"
+  }
+}

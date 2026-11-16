@@ -1,0 +1,140 @@
+{
+  "checkedAt": "2026-10-29T21:58:59.261Z",
+  "project": "parchapp-ee6cc",
+  "deployment": [
+    {
+      "name": "getCoordinationInsight",
+      "state": "ACTIVE",
+      "updatedAt": "2026-10-29T21:47:34.738103671Z",
+      "legacyDataset": null,
+      "persistentRetries": false
+    },
+    {
+      "name": "prepareProposalComparison",
+      "state": "ACTIVE",
+      "updatedAt": "2026-10-29T21:47:27.452989015Z",
+      "legacyDataset": null,
+      "persistentRetries": false
+    },
+    {
+      "name": "validatePlanningSlot",
+      "state": "ACTIVE",
+      "updatedAt": "2026-10-29T21:47:37.587058655Z",
+      "legacyDataset": null,
+      "persistentRetries": false
+    },
+    {
+      "name": "publishActivity",
+      "state": "ACTIVE",
+      "updatedAt": "2026-10-29T21:47:38.671373005Z",
+      "legacyDataset": null,
+      "persistentRetries": false
+    },
+    {
+      "name": "updateActivityDetails",
+      "state": "ACTIVE",
+      "updatedAt": "2026-10-29T21:47:39.684481061Z",
+      "legacyDataset": null,
+      "persistentRetries": false
+    },
+    {
+      "name": "recordFirstActivityConfirmation",
+      "state": "ACTIVE",
+      "updatedAt": "2026-10-29T21:47:40.760491214Z",
+      "legacyDataset": null,
+      "persistentRetries": false
+    },
+    {
+      "name": "refreshCoordinationInsight",
+      "state": "ACTIVE",
+      "updatedAt": "2026-10-29T21:47:28.766829275Z",
+      "legacyDataset": null,
+      "persistentRetries": false
+    },
+    {
+      "name": "refreshResponseTimeInsight",
+      "state": "ACTIVE",
+      "updatedAt": "2026-10-29T21:47:31.580108265Z",
+      "legacyDataset": null,
+      "persistentRetries": false
+    },
+    {
+      "name": "refreshTeamInsights",
+      "state": "ACTIVE",
+      "updatedAt": "2026-10-29T21:47:35.892626294Z",
+      "legacyDataset": null,
+      "persistentRetries": false
+    },
+    {
+      "name": "refreshTeamInsightsNightly",
+      "state": "ACTIVE",
+      "updatedAt": "2026-10-29T21:48:20.194098988Z",
+      "legacyDataset": null,
+      "persistentRetries": false
+    }
+  ],
+  "refresh": null,
+  "endpoints": [
+    {
+      "name": "getCoordinationInsight",
+      "http": 403,
+      "error": null
+    },
+    {
+      "name": "prepareProposalComparison",
+      "http": 403,
+      "error": null
+    }
+  ],
+  "aggregates": [
+    {
+      "name": "bq1_engine_latency",
+      "http": 200,
+      "updatedAt": "2026-10-29T21:49:08.783Z",
+      "total": null,
+      "known": null,
+      "unknown": null,
+      "source": null,
+      "environment": null,
+      "invitations": null
+    },
+    {
+      "name": "bq8_feature_usage",
+      "http": 200,
+      "updatedAt": "2026-10-29T21:49:08.783Z",
+      "total": null,
+      "known": null,
+      "unknown": null,
+      "source": null,
+      "environment": null,
+      "invitations": null
+    },
+    {
+      "name": "bq5_response_time",
+      "http": 200,
+      "updatedAt": "2026-10-29T21:49:08.783Z",
+      "total": null,
+      "known": null,
+      "unknown": null,
+      "source": "firestore-server-invitations",
+      "environment": null,
+      "invitations": "4"
+    },
+    {
+      "name": "bq9_comparison_confirmation",
+      "http": 200,
+      "updatedAt": "2026-10-29T21:49:08.783Z",
+      "total": "0",
+      "known": "0",
+      "unknown": "0",
+      "source": "firestore-server-records",
+      "environment": "production",
+      "invitations": null
+    }
+  ],
+  "job": {
+    "name": "projects/parchapp-ee6cc/locations/us-central1/jobs/firebase-schedule-refreshTeamInsightsNightly-us-central1",
+    "lastAttemptTime": "2026-10-29T21:49:08.715634Z",
+    "status": {}
+  }
+}

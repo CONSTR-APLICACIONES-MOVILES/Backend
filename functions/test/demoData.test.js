@@ -35,3 +35,24 @@ test("builds the member name from the email like UserProfile.fromAccount", () =>
   assert.deepEqual(member.busy, []);
   assert.equal(memberForAccount("u", "x@y.co", "Juan David Guzmán").initials, "JG");
 });
+
+test("demo availability: weekdays shift the schedule, weekends are free", () => {
+  const {demoBusyOn, demoAvailability} = require("../src/demoData");
+  const mateo = demoGroups().roomies.members.find((m) => m.id === "mateo");
+  assert.deepEqual(demoBusyOn(mateo, "2026-10-26"), mateo.busy); // Monday, no shift
+  assert.deepEqual(demoBusyOn(mateo, "2026-10-27"), [{start: 570, end: 810}, {start: 1110, end: 1200}]);
+  assert.deepEqual(demoBusyOn(mateo, "2026-10-31"), []); // Saturday
+  const docs = demoAvailability("2026-10-26", 2);
+  assert.ok(docs.some((d) => d.uid === "mateo" && d.date === "2026-10-27"));
+  assert.ok(docs.every((d) => d.busy.every((b) => b.start < b.end && b.end <= 1440)));
+});
+
+test("campus areas use the locationAreaId values publishActivity accepts", () => {
+  const {CAMPUS_AREAS} = require("../src/campusAreas");
+  const accepted = ["central_library", "mario_laserna", "campus_north", "campus_south", "outside_campus", "unknown"];
+  for (const area of CAMPUS_AREAS) {
+    assert.ok(accepted.includes(area.id), area.id);
+    assert.ok(area.name && Array.isArray(area.aliases));
+    if (area.id !== "outside_campus") assert.ok(Number.isFinite(area.lat) && Number.isFinite(area.lng));
+  }
+});

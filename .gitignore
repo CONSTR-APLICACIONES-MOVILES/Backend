@@ -1,9 +1,25 @@
 node_modules/
+tmp/
+.scannerwork/
+.env.sonar
+build-projects-check.json
 *.log
 .firebase/
+.emulator-data/
 functions/.env.local
 firebase-export-*/
 # Client config files belong in each app, not here.
 google-services.json
 GoogleService-Info.plist
 service-account*.json
+
+# Isolated local metrics emulator configuration
+/firebase.development.local.json
+/firebase.integration.local.json
+
+# Local deployment configuration; preserve the currently deployed parameter.
+/functions/.env.parchapp-ee6cc
+
+# Machine-specific Firebase settings
+/firebase.*.local.json
+/functions/.env.*

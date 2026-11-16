@@ -1,0 +1,56 @@
+{
+  "checkedAt": "2026-10-29T21:50:45.699Z",
+  "project": "parchapp-ee6cc",
+  "databases": {
+    "http": 200,
+    "databases": [
+      {
+        "name": "projects/parchapp-ee6cc/databases/(default)",
+        "location": "nam5",
+        "type": "FIRESTORE_NATIVE"
+      }
+    ]
+  },
+  "analytics": {
+    "http": 200,
+    "datasets": [],
+    "more": false
+  },
+  "authentication": {
+    "http": 200,
+    "emailPasswordEnabled": true,
+    "passwordRequired": true
+  },
+  "functions": {
+    "count": 53,
+    "clientCalls": [
+      "cancelActivity",
+      "getActivities",
+      "getActivity",
+      "getActivityRecommendations",
+      "getAlerts",
+      "getCommunityPeers",
+      "getCoordinationInsight",
+      "getProfile",
+      "getScheduleDay",
+      "getScheduleFriends",
+      "importCalendarAvailability",
+      "markAlertsRead",
+      "markNotificationEventsRead",
+      "prepareProposalComparison",
+      "presentActivityRecommendations",
+      "respondToActivityInvitation",
+      "updateActivityDetails",
+      "updatePreferences",
+      "updatePresence",
+      "updateProfile",
+      "validatePlanningSlot"
+    ],
+    "missingClientCalls": []
+  },
+  "limits": [
+    "Function presence is not an authenticated end-to-end test.",
+    "Call scan finds string literals only.",
+    "No business documents were read or written."
+  ]
+}
