@@ -20,6 +20,15 @@ or Firestore client permissions changed.
 
 ## Availability and Java compatibility
 
+Gabriel's new BQ9 counts current stored busy intervals without changing any
+import or Schedule API. `refreshScheduleImportInsight` takes no arguments and
+requires the organization's `orgAnalytics: true` claim; it writes aggregate-only
+`insights/bq9_google_calendar_adoption`. The dashboard invokes it alongside the
+existing refresh functions. Flutter's private event import is a separate
+persistence path from the FreeBusy callable described below; BQ9 handles both
+without adding their shared copies twice. See
+[BQ9 methodology and limitations](bq9-google-calendar-adoption.md).
+
 The client reads Google's primary calendar through FreeBusy with the
 `calendar.freebusy` permission. It never requests event content. Reference:
 [Google FreeBusy query](https://developers.google.com/workspace/calendar/api/v3/reference/freebusy/query).

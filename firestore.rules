@@ -5,23 +5,56 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // =========================================================
+    // COMMON HELPERS
+    // =========================================================
+
     function signedIn() {
       return request.auth != null;
     }
 
+    function isOwner(userId) {
+      return signedIn()
+          && request.auth.uid == userId;
+    }
+
     function isMember(groupData) {
-      return signedIn() && request.auth.uid in groupData.memberIds;
+      return signedIn()
+          && request.auth.uid in groupData.memberIds;
     }
 
     function groupData(groupId) {
-      return get(/databases/$(database)/documents/groups/$(groupId)).data;
+      return get(
+        /databases/$(database)/documents/groups/$(groupId)
+      ).data;
+    }
+
+    // Checks whether the currently authenticated user has an
+    // accepted friendship with another user.
+    //
+    // Friendship documents are stored under:
+    //
+    // users/{currentUserId}/friends/{friendUserId}
+    //
+    function isAcceptedFriend(otherUserId) {
+      return signedIn()
+          && request.auth.uid != otherUserId
+          && exists(
+            /databases/$(database)/documents/users/$(request.auth.uid)/friends/$(otherUserId)
+          )
+          && get(
+            /databases/$(database)/documents/users/$(request.auth.uid)/friends/$(otherUserId)
+          ).data.status == 'accepted';
     }
 
     // Elements added or removed between two arrays.
     function changed(before, after) {
       return before.toSet()
           .difference(after.toSet())
-          .union(after.toSet().difference(before.toSet()));
+          .union(
+            after.toSet()
+                .difference(before.toSet())
+          );
     }
 
     function validDescription(data) {
@@ -47,6 +80,151 @@ service cloud.firestore {
               && (!('timeBucket' in data.planningContext)
                   || data.planningContext.timeBucket is string));
     }
+    function validDayKey(data) {
+      return data.dayKey is string
+          && data.dayKey.size() == 10;
+    }
+
+
+    // =========================================================
+    // USERS
+    // =========================================================
+    //
+    // Public/basic profile information used by Schedule.
+    //
+    // Structure:
+    //
+    // users/{userId}
+    //
+    // Example:
+    //
+    // {
+    //   name: "Daniel",
+    //   fullName: "Daniel Martinez",
+    //   initials: "DM"
+    // }
+    //
+    // Location is intentionally NOT stored here.
+    //
+    // =========================================================
+
+    match /users/{userId} {
+
+      // A user can read their own profile.
+      //
+      // Accepted friends can also read the basic profile.
+      allow read: if isOwner(userId)
+          || isAcceptedFriend(userId);
+
+      // Users may create/update only their own profile.
+      allow create, update: if isOwner(userId)
+
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 80
+
+          && request.resource.data.fullName is string
+          && request.resource.data.fullName.size() > 0
+          && request.resource.data.fullName.size() <= 160
+
+          && request.resource.data.initials is string
+          && request.resource.data.initials.size() > 0
+          && request.resource.data.initials.size() <= 5
+
+          && request.resource.data.keys().hasOnly([
+            'name',
+            'fullName',
+            'initials'
+          ]);
+
+      allow delete: if isOwner(userId);
+
+
+      // =======================================================
+      // FRIEND RELATIONSHIPS
+      // =======================================================
+      //
+      // users/{userId}/friends/{friendId}
+      //
+      // Example:
+      //
+      // users/gabriel/friends/daniel
+      //
+      // {
+      //   friendId: "daniel",
+      //   status: "accepted",
+      //   createdAt: timestamp
+      // }
+      //
+      // For now friendship relationships are backend-managed.
+      // The seed script creates them.
+      //
+      // =======================================================
+
+      match /friends/{friendId} {
+
+        // A user can read their own friend list.
+        allow read: if isOwner(userId);
+
+        // For the current prototype, friendships are created
+        // only by trusted backend code / seed scripts.
+        allow create, update, delete: if false;
+      }
+    }
+
+
+    // =========================================================
+    // USER LOCATIONS
+    // =========================================================
+    //
+    // Location is separated from the profile because it is
+    // contextual/private information.
+    //
+    // Structure:
+    //
+    // locations/{userId}
+    //
+    // {
+    //   location: GeoPoint,
+    //   updatedAt: timestamp
+    // }
+    //
+    // Current user:
+    //     real GPS position
+    //
+    // Demo friends:
+    //     dummy positions generated by the seed
+    //
+    // =========================================================
+
+    match /locations/{userId} {
+
+      // Owner can read their location.
+      //
+      // Accepted friends can read the shared location so that
+      // Schedule can calculate nearby friends.
+      allow read: if isOwner(userId)
+          || isAcceptedFriend(userId);
+
+      // A user may update only their own GPS location.
+      allow create, update: if isOwner(userId)
+
+          && request.resource.data.location is latlng
+
+          && request.resource.data.updatedAt is timestamp
+
+          && request.resource.data.keys().hasOnly([
+            'location',
+            'updatedAt'
+          ]);
+
+      allow delete: if isOwner(userId);
+    }
+
+
+    // =========================================================
+    // GROUPS
+    // =========================================================
 
     match /groups/{groupId} {
 
@@ -59,6 +237,7 @@ service cloud.firestore {
       // Members may RSVP for themselves and manage pending
       // invitations. Nothing else changes from a client.
       allow update: if isMember(resource.data)
+
           && request.resource.data
               .diff(resource.data)
               .affectedKeys()
@@ -67,50 +246,71 @@ service cloud.firestore {
                 'maybeIds',
                 'pendingInvites'
               ])
+
           && changed(
                 resource.data.goingIds,
                 request.resource.data.goingIds
-              ).hasOnly([request.auth.uid])
+              ).hasOnly([
+                request.auth.uid
+              ])
+
           && changed(
                 resource.data.maybeIds,
                 request.resource.data.maybeIds
-              ).hasOnly([request.auth.uid])
-          && request.resource.data.pendingInvites.size() <= 50;
+              ).hasOnly([
+                request.auth.uid
+              ])
+
+          && request.resource.data
+              .pendingInvites
+              .size() <= 50;
     }
+
 
     // =========================================================
     // PRIVATE USER SCHEDULE
     // =========================================================
     //
-    // A user's imported Google Calendar is stored here.
+    // Complete Google Calendar information.
     //
-    // Full event information is PRIVATE.
-    // Only the owner can read/write it.
-    //
-    // Shared friend availability must NOT read event details.
-    // A separate free/busy projection will be used for that.
+    // PRIVATE:
+    // only the owner may read it.
     //
     // Structure:
     //
     // schedules/{userId}
     // schedules/{userId}/slots/{slotId}
     //
+    // Example private slot:
+    //
+    // {
+    //   title: "...",
+    //   description: "...",
+    //   location: "...",
+    //   start: timestamp,
+    //   end: timestamp
+    // }
+    //
+    // Friends NEVER read this collection.
+    //
     // =========================================================
 
     match /schedules/{userId} {
 
-      // Only the authenticated owner may read the schedule metadata.
-      allow read: if signedIn()
-          && request.auth.uid == userId;
+      allow read: if isOwner(userId);
 
-      // Only the owner may create/update their schedule metadata.
-      allow create, update: if signedIn()
-          && request.auth.uid == userId
+      allow create, update: if isOwner(userId)
+
           && request.resource.data.ownerId == userId
-          && request.resource.data.source == 'google_calendar'
+
+          && request.resource.data.source ==
+              'google_calendar'
+
           && request.resource.data.importedCount is int
           && request.resource.data.importedCount >= 0
+
           && request.resource.data.lastImportedAt is timestamp
+
           && request.resource.data.keys().hasOnly([
             'ownerId',
             'source',
@@ -118,59 +318,54 @@ service cloud.firestore {
             'importedCount'
           ]);
 
-      // Only the owner may delete their schedule.
-      allow delete: if signedIn()
-          && request.auth.uid == userId;
+      allow delete: if isOwner(userId);
 
-      // ---------------------------------------------------------
+
+      // -------------------------------------------------------
       // PRIVATE CALENDAR SLOTS
-      // ---------------------------------------------------------
+      // -------------------------------------------------------
 
       match /slots/{slotId} {
 
-        // Only the owner can see their imported event details.
-        allow read: if signedIn()
-            && request.auth.uid == userId;
+        // Only the owner can see complete event information.
+        allow read: if isOwner(userId);
 
-        // Only the owner can create or modify their slots.
-        allow create, update: if signedIn()
-            && request.auth.uid == userId
+        allow create, update: if isOwner(userId)
 
-            // Google Calendar source identifier.
             && request.resource.data.externalId is string
             && request.resource.data.externalId.size() > 0
 
-            // Event title.
             && request.resource.data.title is string
 
-            // Description is optional.
             && (
-              !('description' in request.resource.data)
+              !(
+                'description'
+                in request.resource.data
+              )
               || request.resource.data.description is string
             )
 
-            // Location is optional.
             && (
-              !('location' in request.resource.data)
+              !(
+                'location'
+                in request.resource.data
+              )
               || request.resource.data.location is string
             )
 
-            // Calendar time range.
             && request.resource.data.start is timestamp
             && request.resource.data.end is timestamp
-            && request.resource.data.end > request.resource.data.start
+            && request.resource.data.end >
+                request.resource.data.start
 
-            // YYYY-MM-DD.
-            && request.resource.data.dayKey is string
-            && request.resource.data.dayKey.size() == 10
+            && validDayKey(
+              request.resource.data
+            )
 
-            // Current supported source.
-            && request.resource.data.source == 'google_calendar'
+            && request.resource.data.source in ['google_calendar', 'andes_events']
 
-            // Audit/import information.
             && request.resource.data.importedAt is timestamp
 
-            // Reject unexpected fields.
             && request.resource.data.keys().hasOnly([
               'externalId',
               'title',
@@ -183,9 +378,103 @@ service cloud.firestore {
               'importedAt'
             ]);
 
-        allow delete: if signedIn()
-            && request.auth.uid == userId;
+        allow delete: if isOwner(userId);
       }
+    }
+
+
+    // =========================================================
+    // SHARED AVAILABILITY
+    // =========================================================
+    //
+    // Privacy-safe projection of a user's schedule.
+    //
+    // Unlike schedules/{uid}/slots, these documents NEVER
+    // contain:
+    //
+    // - title
+    // - description
+    // - location
+    // - Google event id
+    //
+    // Friends only learn:
+    //
+    // "This user is busy from X to Y."
+    //
+    // Structure:
+    //
+    // availability/{userId}
+    // availability/{userId}/slots/{slotId}
+    //
+    // =========================================================
+
+    match /availability/{userId} {
+
+      // Owner and accepted friends can read availability.
+      allow read: if isOwner(userId)
+          || isAcceptedFriend(userId);
+
+      // Metadata can only be generated/updated by the owner.
+      allow create, update: if isOwner(userId)
+
+          && request.resource.data.ownerId == userId
+
+          && request.resource.data.slotCount is int
+          && request.resource.data.slotCount >= 0
+
+          && request.resource.data.updatedAt is timestamp
+
+          && request.resource.data.keys().hasOnly([
+            'ownerId',
+            'slotCount',
+            'updatedAt'
+          ]);
+
+      allow delete: if isOwner(userId);
+
+
+      // -------------------------------------------------------
+      // SHARED BUSY SLOTS
+      // -------------------------------------------------------
+
+      match /slots/{slotId} {
+
+        // Friends may see only the safe projection.
+        allow read: if isOwner(userId)
+            || isAcceptedFriend(userId);
+
+        // The owner creates their own availability projection.
+        allow create, update: if isOwner(userId)
+
+            && request.resource.data.start is timestamp
+
+            && request.resource.data.end is timestamp
+
+            && request.resource.data.end >
+                request.resource.data.start
+
+            && validDayKey(
+              request.resource.data
+            )
+
+            // No other field is allowed.
+            //
+            // This prevents accidentally storing:
+            // title, description or location.
+            && request.resource.data.keys().hasOnly([
+              'start',
+              'end',
+              'dayKey'
+            ]);
+
+        allow delete: if isOwner(userId);
+      }
+    }
+
+
+    match /andesEvents/{eventId} {
+      allow read: if signedIn() && resource.data.published == true;
+      allow write: if false;
     }
 
     // =========================================================
@@ -196,16 +485,31 @@ service cloud.firestore {
 
       // Queries must filter by groupId so this rule can be checked.
       allow read: if signedIn()
-          && isMember(groupData(resource.data.groupId));
+          && isMember(
+            groupData(
+              resource.data.groupId
+            )
+          );
 
       allow create: if signedIn()
-          && isMember(groupData(request.resource.data.groupId))
-          && request.resource.data.createdBy == request.auth.uid
-          && request.resource.data.createdAt == request.time
+
+          && isMember(
+            groupData(
+              request.resource.data.groupId
+            )
+          )
+
+          && request.resource.data.createdBy ==
+              request.auth.uid
+
+          && request.resource.data.createdAt ==
+              request.time
+
           && request.resource.data.status in [
             'PROPOSED',
             'CONFIRMED'
           ]
+
           && request.resource.data.title is string
           && request.resource.data.title.size() > 0
           && request.resource.data.title.size() <= 120
@@ -226,7 +530,10 @@ service cloud.firestore {
           // Canonical schedules must stay consistent with
           // their display fields.
           && (
-            !('startTime' in resource.data)
+            !(
+              'startTime'
+              in resource.data
+            )
             || !request.resource.data
                 .diff(resource.data)
                 .affectedKeys()
@@ -242,18 +549,10 @@ service cloud.firestore {
           ];
 
       allow delete: if signedIn()
-          && resource.data.createdBy == request.auth.uid;
+          && resource.data.createdBy ==
+              request.auth.uid;
     }
 
-    // =========================================================
-    // SLOT RECOMMENDATIONS
-    // =========================================================
-
-    // Only authenticated callable functions may record
-    // impressions and decisions.
-    match /slotRecommendations/{recommendationId} {
-      allow read, write: if false;
-    }
 
     // These records are backend-owned projections. Mobile clients use callable APIs.
     match /activities/{activityId}/lifecycle/{eventId} {

@@ -18,6 +18,7 @@ const {ActivityService} = require("./src/activityService");
 const {createActivityCallables} = require("./src/activityCallables");
 const {dispatchPendingReminders} = require("./src/reminderService");
 const {requireOrganizationAnalytics} = require('./src/organizationAccess');
+const {refreshScheduleImportInsight} = require('./src/scheduleInsights');
 
 initializeApp();
 
@@ -30,6 +31,12 @@ Object.assign(exports, createActivityCallables(activityService));
 const {MobileService} = require("./src/mobileService");
 const {createMobileCallables} = require("./src/mobileCallables");
 Object.assign(exports, createMobileCallables(new MobileService(getFirestore())));
+
+exports.refreshScheduleImportInsight = require('./src/scheduleInsightCallables')
+    .createScheduleInsightCallable(getFirestore());
+exports.refreshScheduleImportInsightNightly = onSchedule(
+    {schedule: 'every day 05:00', timeZone: 'America/Bogota', region: 'us-central1'},
+    async () => refreshScheduleImportInsight(getFirestore()));
 
 // Extends the same Firestore insights collection without replacing the team's
 // deployed BQ1/7/8/9 aggregator or its historical metric definitions.

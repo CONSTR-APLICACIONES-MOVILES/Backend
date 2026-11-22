@@ -46,6 +46,11 @@ ref.update({'goingIds': FieldValue.arrayUnion([uid]), 'maybeIds': FieldValue.arr
 ```
 ## `schedules/{userId}`
 
+The separate **Gabriel BQ9 Google Calendar adoption** aggregate reads only
+projected interval/source fields from this representation and availability day
+snapshots; it never exposes event details. See
+[counting, precedence and privacy](bq9-google-calendar-adoption.md).
+
 Stores the authenticated user's private calendar information.
 
 This collection is different from the shared `busy` blocks stored in group
@@ -144,6 +149,16 @@ accesses them for the authenticated callable service and scheduled insight.
 Each candidate counts once when its organizer acknowledges display. Transactions
 make presentation and decision retries idempotent and permit one decision per
 batch. Choosing a slot updates the activity and all batch outcomes atomically.
+
+## `insights/bq9_google_calendar_adoption` (Gabriel Polania)
+
+The independent `insights/bq9_google_calendar_adoption` document stores
+`totalSlots`, `googleSlots`, `otherSlots`, `unknownSlots`, nullable `percentage`,
+`measurement: "stored_busy_intervals"`, `scope`, `precedence`, and `updated_at`.
+It covers all current stored days and counts normalized busy intervals rather
+than original events. It does not replace `bq9_comparison_confirmation`.
+See [BQ9 Google Calendar adoption](bq9-google-calendar-adoption.md) for the schema
+and refresh contract.
 
 ## `insights/bq3_slot_acceptance`
 

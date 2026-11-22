@@ -1,6 +1,8 @@
 // Card presentation only; measurements come from shared server aggregates.
 const value = (n, suffix = '') => n == null ? '—' : `${n}${suffix}`;
-export const compareQuestionIds = (a, b) => Number(a.id.replace(/^bq/, '')) - Number(b.id.replace(/^bq/, ''));
+export const compareQuestionIds = (a, b) =>
+  Number(a.id.match(/^bq(\d+)/)?.[1] ?? Infinity) - Number(b.id.match(/^bq(\d+)/)?.[1] ?? Infinity) ||
+  a.id.localeCompare(b.id);
 
 export function createActivityQuestions({reminderLabel}) {
   return [

@@ -97,6 +97,7 @@
     import {getFunctions, connectFunctionsEmulator, httpsCallable}
       from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
     import {createActivityQuestions, compareQuestionIds} from "./activity-questions.mjs";
+    import {createScheduleImportQuestion} from "./schedule-question.mjs";
     import {firebaseConfig, useEmulators, emulatorProjectId} from "./firebase-config.js";
 
 // on localhost we talk to the emulators with the demo project, in hosting we use the real project
@@ -122,6 +123,7 @@
 // one entry per business question, to add bq7 later copy one entry and change the document and the render
     const QUESTIONS = [
       ...createActivityQuestions({reminderLabel}),
+      createScheduleImportQuestion(),
             {
         id: "bq11", type: "Type 4", owner: "Jhon Vega", doc: "bq11_confirmed_activity_areas",
         question: "¿En qué franjas horarias y zonas del campus se concentran las actividades confirmadas?",
@@ -264,6 +266,10 @@
       $(`${q.id}-method`).hidden = true;
       charts[q.id]?.destroy();
       if (!ready) {
+        if (q.methodology) {
+          const method = $(`${q.id}-method`); method.hidden = false;
+          method.querySelector("p").textContent = q.methodology;
+        }
         $(`${q.id}-number`).innerHTML = "—";
         return;
       }
@@ -302,13 +308,13 @@
       $(`${q.id}-chart`).parentElement.hidden = !view.chart?.labels.length;
       if (!view.chart?.labels.length) return;
       charts[q.id] = new Chart($(`${q.id}-chart`), {
-        type: "bar",
+        type: view.chartType || "bar",
         data: view.chart,
         options: {
           indexAxis: view.horizontal ? "y" : "x",
           maintainAspectRatio: false,
-          plugins: {legend: {display: view.chart.datasets.length > 1}},
-          scales: {x: {beginAtZero: true}, y: {beginAtZero: true}},
+          plugins: {legend: {display: view.chartType === 'doughnut' || view.chart.datasets.length > 1}},
+          ...(view.chartType === 'doughnut' ? {} : {scales: {x: {beginAtZero: true}, y: {beginAtZero: true}}}),
         },
       });
     }
@@ -349,10 +355,11 @@
         const results = await Promise.allSettled([
           httpsCallable(functions, "refreshTeamInsights")(),
           httpsCallable(functions, "refreshActivityInsights")(),
+          httpsCallable(functions, "refreshScheduleImportInsight")(),
         ]);
         await load();
         const errors = results.flatMap((result,index) => result.status === "rejected" ?
-          [`${index === 0 ? "Team" : "BQ2/BQ3/BQ13/BQ14"}: ${result.reason.message}`] : []);
+          [`${["Team", "BQ2/BQ3/BQ13/BQ14", "BQ9 Google Calendar"][index]}: ${result.reason.message}`] : []);
         $("status").textContent += errors.length ? ` · ${errors.join(" · ")}` : " · Aggregates refreshed";
       } catch (error) {
         $("status").textContent = `Refresh failed: ${error.message}`;
