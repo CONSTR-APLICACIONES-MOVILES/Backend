@@ -126,6 +126,33 @@ service cloud.firestore {
           && request.resource.data.created_at == request.time;
     }
 
+    // chat: a message is written by its sender only, with the server time, and never edited or deleted
+    // kind "slot" is a common free slot shared from the chat, its text is the slot as the sender saw it
+    function validMessage(data) {
+      return data.keys().hasOnly(['senderId', 'senderName', 'senderInitials', 'text', 'kind', 'createdAt'])
+          && data.senderId == request.auth.uid
+          && data.senderName is string && data.senderName.size() <= 80
+          && data.senderInitials is string && data.senderInitials.size() <= 4
+          && data.text is string && data.text.size() > 0 && data.text.size() <= 2000
+          && data.kind in ['text', 'slot']
+          && data.createdAt == request.time;
+    }
+
+    // House Chat: the messages of a group, only its members read and write them
+    match /groups/{groupId}/messages/{messageId} {
+      allow read: if isMember(groupData(groupId));
+      allow create: if isMember(groupData(groupId)) && validMessage(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    // chat between two people: the id is the two uids sorted and joined with "_", only those two read and write
+    match /directChats/{pairId}/messages/{messageId} {
+      allow read: if signedIn() && pairId.split('_').size() == 2 && request.auth.uid in pairId.split('_');
+      allow create: if signedIn() && pairId.split('_').size() == 2 && request.auth.uid in pairId.split('_')
+          && validMessage(request.resource.data);
+      allow update, delete: if false;
+    }
+
     // BQ2 observations are validated and deduplicated by recordCreationAttempt.
     match /creationAttempts/{attemptId} {
       allow read, write: if false;
