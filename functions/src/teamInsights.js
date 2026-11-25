@@ -174,7 +174,8 @@ async function refreshTeamInsights(db, {now = new Date(), serverTime, extras = t
   await db.doc("insights/bq1_engine_latency").set({...engine, ...common});
   await db.doc("insights/bq8_feature_usage").set({...usage, ...common});
   await db.doc("insights/bq7_creation_abandonment").set({...creation, ...common});
-  await db.doc("insights/bq9_comparison_confirmation").set({...comparison, ...common});
+// bq9 has its own document: refreshCoordinationInsight writes bq9_comparison_confirmation in another format for the flutter app
+  await db.doc("insights/bq9_compare_usage").set({...comparison, ...common});
   const areas = require("./campusActivityInsights").buildCampusActivityAreas(activities);
   await db.doc("insights/bq11_confirmed_activity_areas").set({...areas, ...common});
   const summary = {total_events: events.length, calculations: engine.total_calculations, feature_uses: usage.total_uses,

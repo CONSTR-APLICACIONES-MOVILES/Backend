@@ -65,9 +65,9 @@ test("refresh reads the window and writes bq1, bq7, bq8, bq9 and bq11 without to
   const summary = await refreshTeamInsights(db, {now, extras: false});
   assert.deepEqual(Object.keys(written).sort(), ["insights/bq11_confirmed_activity_areas",
     "insights/bq1_engine_latency", "insights/bq7_creation_abandonment",
-    "insights/bq8_feature_usage", "insights/bq9_comparison_confirmation"]);
+    "insights/bq8_feature_usage", "insights/bq9_compare_usage"]);
   assert.equal(written["insights/bq11_confirmed_activity_areas"].total_confirmed, 1);
-  assert.equal(written["insights/bq9_comparison_confirmation"].total_activities, 1);
+  assert.equal(written["insights/bq9_compare_usage"].total_activities, 1);
   assert.equal(activitiesSince.toISOString(), "2026-09-29T12:00:00.000Z");
   assert.equal(written["insights/bq1_engine_latency"].total_events, 2);
   assert.equal(written["insights/bq8_feature_usage"].updated_at, now);
