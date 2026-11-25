@@ -62,6 +62,30 @@
     .login p { margin: 0; color: var(--slate); font-size: 14px; }
     .login input { font: inherit; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; }
     .error { color: #B91C1C; font-size: 14px; min-height: 18px; }
+    .activity-lab { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 24px; margin-bottom: 28px; box-shadow: 0 6px 24px #0F172A05; }
+    .lab-heading { display:flex; justify-content:space-between; align-items:start; gap:16px; margin-bottom:20px; }
+    .lab-heading h2 { margin:4px 0 8px; font-size:26px; letter-spacing:-.6px; }
+    .lab-heading p { margin:0; color:var(--slate); line-height:1.5; }
+    .lab-heading .eyebrow { font-size:11px; font-weight:800; color:var(--primary); letter-spacing:1.5px; }
+    .lab-heading .badge { white-space:nowrap; }
+    .lab-filters { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; padding:18px; background:#F6F8FC; border-radius:14px; border:1px solid var(--line); }
+    .lab-filters label, .lab-chart-heading label { display:flex; flex-direction:column; gap:6px; font-size:12px; font-weight:650; color:#475569; min-width:0; }
+    .lab-filters select,.lab-filters input,.lab-chart-heading select { font:inherit; font-weight:500; border:1px solid #CBD5E1; border-radius:9px; background:white; padding:10px; color:var(--dark); width:100%; min-width:0; }
+    .lab-filters .lab-check { flex-direction:row; align-items:center; grid-column:span 2; line-height:1.5; }
+    .lab-check input { width:auto; }
+    .lab-actions { display:flex; gap:8px; align-items:end; flex-wrap:wrap; }
+    .lab-status { margin:16px 0; font-size:13px; color:var(--slate); line-height:1.5; }
+    .lab-results { display:flex; flex-direction:column; gap:18px; }
+    .lab-results .stat-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
+    .lab-results .stat strong { font-size:28px; }
+    .lab-chart-heading { display:flex; align-items:end; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+    .lab-chart { height:300px; position:relative; }
+    .lab-table-wrap { width:100%; overflow-x:auto; }
+    .lab-table-wrap table { min-width:620px; }
+    .lab-results h3 { font-size:15px; margin:0; }
+    .lab-results summary { cursor:pointer; font-size:14px; font-weight:650; color:var(--primary); margin-bottom:10px; }
+    @media(max-width:760px) { .lab-filters { grid-template-columns:repeat(2,minmax(0,1fr)); } .lab-results .stat-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .activity-lab { padding:16px; } .lab-heading { flex-wrap:wrap; } }
+    @media(max-width:380px) { .lab-filters { grid-template-columns:1fr; } .lab-filters .lab-check { grid-column:auto; } }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -85,6 +109,9 @@
 
   <p class="status" id="status" role="status"></p>
   <main id="dashboard" hidden>
+    <section class="activity-lab" id="activity-explorer" aria-label="Interactive activity analytics"></section>
+    <h2>Published snapshots</h2>
+    <p class="status">These cards retain their published windows. Filters above apply to the interactive explorer.</p>
     <div class="grid" id="cards"></div>
   </main>
 
@@ -97,6 +124,7 @@
     import {getFunctions, connectFunctionsEmulator, httpsCallable}
       from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
     import {createActivityQuestions, compareQuestionIds} from "./activity-questions.mjs";
+    import {mountActivityExplorer} from "./activity-explorer.mjs";
     import {firebaseConfig, useEmulators, emulatorProjectId} from "./firebase-config.js";
 
 // on localhost we talk to the emulators with the demo project, in hosting we use the real project
@@ -114,6 +142,8 @@
 
     const charts = {};
     const $ = (id) => document.getElementById(id);
+    const explorer = mountActivityExplorer({root:$("activity-explorer"), Chart:globalThis.Chart,
+      query:async input=>(await httpsCallable(functions,"getActivityAnalytics")(input)).data});
     const FEATURE_NAMES = {
       groups: "Groups", compare_availability: "Compare availability", schedule: "Schedule",
       invitations: "Invitations", alerts: "Alerts",
@@ -300,7 +330,7 @@
         }
       }
       $(`${q.id}-chart`).parentElement.hidden = !view.chart?.labels.length;
-      if (!view.chart?.labels.length) return;
+      if (!view.chart?.labels.length || typeof globalThis.Chart !== 'function') return;
       charts[q.id] = new Chart($(`${q.id}-chart`), {
         type: "bar",
         data: view.chart,
@@ -339,6 +369,7 @@
         }
       }));
       $("status").textContent = `Last read ${new Date().toLocaleTimeString()}${useEmulators ? " · local emulators" : ""}`;
+      await explorer.load();
     }
 
 // the refresh button asks the backend to count the events again and then reads the cards
@@ -375,6 +406,7 @@
 
 // Every signed-in ParchApp account can read; only organization accounts refresh.
     onAuthStateChanged(auth, async (user) => {
+      explorer.setUser(user?.uid || null);
       $("dashboard").hidden = true;
       $("refresh").hidden = true;
       let allowed = false;

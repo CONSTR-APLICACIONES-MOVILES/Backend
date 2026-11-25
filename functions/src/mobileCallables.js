@@ -2,6 +2,9 @@ const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {ServiceError} = require("./errors");
 const {requireOrganizationAnalytics} = require('./organizationAccess');
 const FIELDS = {
+  getActivityAnalytics: ['question','from','to','granularity','size','category','position','strategy','excludeInitial'],
+  getActivityDrafts: ['cursor'],
+  syncActivityDraft: ['id','operationId','expectedVersion','state','category','payload','requestId','clientUserId'],
   inviteGroupFriend:['groupId','userId','clientUserId'],
   getActivityParticipants:['activityId'], changeActivityParticipants:['activityId','action','userId','expectedVersion','clientUserId'],
   setUsername:['username','clientUserId'], searchPeople:['query','cursor','limit'],getPublicPerson:['userId'],
