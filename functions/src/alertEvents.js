@@ -1,4 +1,5 @@
 const {createHash} = require('node:crypto');
+const {chatAlertRow} = require('./chatAlerts');
 const hash = v => createHash('sha256').update(v).digest('hex');
 const iso = v => v ? (v.toDate ? v.toDate() : new Date(v)).toISOString() : null;
 async function recordActivityChange(db, id, before, after, version, eventTime) {
@@ -14,7 +15,8 @@ async function recordActivityChange(db, id, before, after, version, eventTime) {
   }
   await batch.commit();
 }
-async function additionalAlerts(db,uid,groups,activities,now) {
+// includeChat: only the Java app shows chat alerts, other clients would read them as invitations
+async function additionalAlerts(db,uid,groups,activities,now,{includeChat=false}={}) {
   const authorized = new Map(groups.map(g=>[g.id,g.data()]));
   const [events,invites,requests,acceptedRequests] = await Promise.all([
     db.collection(`alertEvents/${uid}/items`).orderBy('createdAt','desc').limit(100).get(),
@@ -45,7 +47,13 @@ async function additionalAlerts(db,uid,groups,activities,now) {
       createdAt:iso(r.updatedAt),studySessionId:null});
   });
   for (const doc of events.docs) {
-    const e=doc.data(), group=authorized.get(e.groupId);
+    const e=doc.data();
+    if (e.kind === 'chatMessage') {
+      const row = includeChat ? chatAlertRow(doc, authorized) : null;
+      if (row) rows.push(row);
+      continue;
+    }
+    const group=authorized.get(e.groupId);
     if (!group) continue;
     const a=(await db.doc(`activities/${e.activityId}`).get()).data();
     if (!a || a.participantIds && !a.participantIds.includes(uid)) continue;

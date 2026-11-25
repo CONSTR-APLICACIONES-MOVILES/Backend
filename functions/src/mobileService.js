@@ -260,14 +260,17 @@ class MobileService {
     return {...before, ...fields, ...(fields.status !== undefined ? {statusExpiresAt: null} : {})};
   }
 
-  async getAlerts(uid) {
+  async getAlerts(uid, input = {}) {
+    requireThat(input.includeChat === undefined || typeof input.includeChat === "boolean",
+        "invalid-argument", "includeChat must be true or false.");
     const groups = await this.groups(uid);
     const pages = await Promise.all(groups.map((g) => this.db.collection("activities")
         .where("groupId", "==", g.id).orderBy("createdAt", "desc").limit(100).get()));
     const activities = pages.flatMap((s) => s.docs).filter((a) => a.data().createdBy !== uid && !a.data().cancelled &&
           (!a.data().participantIds || a.data().participantIds.includes(uid)))
         .sort((a, b) => Date.parse(iso(b.data().createdAt)) - Date.parse(iso(a.data().createdAt))).slice(0, 200);
-    const extra = await additionalAlerts(this.db,uid,groups,pages.flatMap(p=>p.docs),this.clock());
+    const extra = await additionalAlerts(this.db,uid,groups,pages.flatMap(p=>p.docs),this.clock(),
+        {includeChat: input.includeChat === true});
     if (!activities.length) return {alerts: extra.sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt)).slice(0,200)};
     const states = await this.db.getAll(...activities.map((a) => this.db.doc(`inboxes/${uid}/items/${a.id}`)));
     const invitations = activities.map((a, index) => ({kind: "invitation", id: a.id, title: a.data().title,
@@ -376,14 +379,14 @@ class MobileService {
   }
 
   async markNotificationEventsRead(uid, input) {
-    requireThat(Array.isArray(input.ids) && input.ids.every(id => /^(evt|grp|rem|friend)_[a-f0-9]{64}$/.test(id)), 'invalid-argument', 'Supply event notification IDs.');
+    requireThat(Array.isArray(input.ids) && input.ids.every(id => /^(evt|grp|rem|friend|chat)_[a-f0-9]{64}$/.test(id)), 'invalid-argument', 'Supply event notification IDs.');
     return this.markAlertsRead(uid,input);
   }
 
   async markAlertsRead(uid, input) {
     requireThat(Array.isArray(input.ids) && input.ids.length <= 200 && new Set(input.ids).size === input.ids.length,
         "invalid-argument", "Supply up to 200 distinct alert IDs.");
-    const currentAlerts = (await this.getAlerts(uid)).alerts;
+    const currentAlerts = (await this.getAlerts(uid, {includeChat: true})).alerts;
     const extraIds = new Set(currentAlerts.filter(a=>a.kind !== 'invitation').map(a=>a.id));
     await this.db.runTransaction(async (tx) => {
       for (const id of input.ids) {
