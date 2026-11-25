@@ -22,7 +22,7 @@ const FIELDS = {
   cancelActivity: ['activityId', 'expectedVersion'],
   getScheduleFriends: ["groupId"], getScheduleDay: ["date", "friendIds"],
   importCalendarAvailability: ["startDate", "days", "intervals"],
-  getProfile: [], updateProfile: ["fields", "clientUserId"], getAlerts: [], getActivities: [],
+  getProfile: [], updateProfile: ["fields", "clientUserId"], getAlerts: ["includeChat"], getActivities: [],
   setActivityReminder: ["activityId", "minutesBefore"],
   markNotificationEventsRead: ["ids", "clientUserId"],
   markAlertsRead: ["ids", "clientUserId"], respondToActivityInvitation: ["id", "response", "expectedResponse", "clientUserId"],
