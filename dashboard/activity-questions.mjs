@@ -1,5 +1,7 @@
 // Card presentation only; measurements come from shared server aggregates.
 const value = (n, suffix = '') => n == null ? '—' : `${n}${suffix}`;
+const rows = value => Array.isArray(value) ? value : [];
+const decimal = n => n != null && Number.isFinite(Number(n)) ? Number(n).toFixed(2) : '—';
 export const compareQuestionIds = (a, b) => Number(a.id.replace(/^bq/, '')) - Number(b.id.replace(/^bq/, ''));
 
 export function createActivityQuestions({reminderLabel}) {
@@ -27,7 +29,7 @@ export function createActivityQuestions({reminderLabel}) {
         stats:[{label:'Modified',value:value(d.modified)},{label:'Not selected',value:value(d.not_selected)},{label:'Undecided',value:value(d.undecided)}],
         metrics:'Acceptance is not activity confirmation.',
         method:'All unique presented suggestions enter the denominator, including unselected ones. Retries do not add exposures.',
-        chart:{labels:d.by_position.map(r=>`Position ${r.slot_position+1}`),datasets:[{label:'Presented',data:d.by_position.map(r=>r.presented),backgroundColor:'#BFDBFE'},{label:'Accepted unchanged',data:d.by_position.map(r=>r.accepted_unchanged),backgroundColor:'#2563EB'}]},
+        chart:{labels:rows(d.by_position).map(r=>r.slot_position>=0?`Position ${Number(r.slot_position)+1}`:'Unknown position'),datasets:[{label:'Presented',data:rows(d.by_position).map(r=>r.presented),backgroundColor:'#BFDBFE'},{label:'Accepted unchanged',data:rows(d.by_position).map(r=>r.accepted_unchanged),backgroundColor:'#2563EB'}]},
       }),
     },
     {
@@ -54,12 +56,15 @@ export function createActivityQuestions({reminderLabel}) {
       render:d=>({
         number:value(d.mature_activities),detail:'mature activities available for comparison',
         stats:[{label:'Activities',value:value(d.total)},{label:'Pending',value:value(d.pending)},{label:'Unclassified',value:value(d.unknown)}],
-        note:d.decisions.some(r=>r.strategy)?d.decisions.filter(r=>r.strategy).map(r=>`${r.size} people: ${reminderLabel(r.strategy)}`).join(' · '):'No winner yet — insufficient evidence or no joint improvement',
-        tone:d.decisions.some(r=>r.strategy)?'positive':'warning',
+        note:rows(d.decisions).some(r=>r.strategy)?rows(d.decisions).filter(r=>r.strategy).map(r=>`${r.size} people: ${reminderLabel(r.strategy)}`).join(' · '):
+          rows(d.decisions).some(r=>r.sufficient)?'Sufficient samples, but no strategy improves speed and alerts together.':
+          d.pending>0 && !d.mature_activities?'Waiting for the 24-hour observation window; pending plans are not failures.':
+          'No winner yet — insufficient evidence. Compare sample sizes and both strategies below.',
+        tone:rows(d.decisions).some(r=>r.strategy)?'positive':'warning',
         metrics:'30 vs 60 min · In-app reminders · 24 h observation',
         method:'Compare confirmation speed, rate and alerts per activity by group size. At least 20 activities and 5 confirmations per strategy are needed. Observational, not causal; uninstrumented history is excluded.',
-        table:{headers:['Size / delay','n / confirmed','Median / p95 min','Alerts / plan'],rows:d.by_strategy_size.map(r=>[`${r.size} · ${reminderLabel(r.strategy)}`,`${r.activities} / ${value(r.confirmation_rate,'%')}`,`${value(r.median_minutes)} / ${value(r.p95_minutes)}`,r.notifications_per_activity.toFixed(2)])},
-        chart:{labels:d.by_strategy_size.map(r=>`${r.size} · ${reminderLabel(r.strategy)}`),datasets:[{label:'Confirmation %',data:d.by_strategy_size.map(r=>r.confirmation_rate),backgroundColor:'#10B981'}]},
+        table:{headers:['Size / delay','n / confirmed %','Median / p95 min','Alerts / plan'],rows:rows(d.by_strategy_size).map(r=>[`${r.size} · ${reminderLabel(r.strategy)}`,`${r.activities} / ${value(r.confirmation_rate,'%')}`,`${value(r.median_minutes)} / ${value(r.p95_minutes)}`,decimal(r.notifications_per_activity)])},
+        chart:{labels:rows(d.by_strategy_size).map(r=>`${r.size} · ${reminderLabel(r.strategy)}`),datasets:[{label:'Confirmation %',data:rows(d.by_strategy_size).map(r=>r.confirmation_rate),backgroundColor:'#10B981'}]},
       }),
     },
   ];

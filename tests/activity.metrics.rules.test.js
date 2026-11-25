@@ -36,3 +36,12 @@ test('legacy Java confirmation stays allowed but attribution snapshots cannot be
   await assertFails(updateDoc(doc(owner,'activities/a'),{recommendationAttribution:{candidateId:'fake'}}));
   await assertFails(setDoc(doc(owner,'coordinationMeasurements/a'),{firstConfirmedAt:new Date()}));
 });
+
+test('draft documents and operation receipts cannot bypass authenticated callable ownership',async()=>{
+  for(const user of [env.authenticatedContext('owner'),env.authenticatedContext('peer'),env.unauthenticatedContext()]) {
+    for(const path of ['privateDraftOwners/owner/drafts/draft','privateDraftOwners/owner/drafts/draft/operations/op','privateDraftOwners/owner/publications/request']) {
+      await assertFails(getDoc(doc(user.firestore(),path)));
+      await assertFails(setDoc(doc(user.firestore(),path),{state:'published',version:99}));
+    }
+  }
+});

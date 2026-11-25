@@ -62,7 +62,7 @@ async function dispatchPendingReminders(db,now=new Date()) {
   return {checked:pending.size,dispatched,cancelled};
 }
 
-function buildReminderInsight(records,measurements,deliveries,now=new Date(),env='production') {
+function buildReminderInsight(records,measurements,deliveries,now=new Date(),env='production',range={}) {
   const rows=new Map(),seen=new Set();let pending=0,unknown=0,total=0;
   const sent=new Map();
   for(const d of deliveries){
@@ -73,7 +73,7 @@ function buildReminderInsight(records,measurements,deliveries,now=new Date(),env
   }
   for(const r of records){
     const invited=stamp(r.invitedAt);
-    if(r.environment!==env || !Number.isFinite(invited) || invited<+now-30*DAY || invited>+now)continue;
+    if(r.environment!==env || !Number.isFinite(invited) || invited<(range.from ?? +now-30*DAY) || invited>Math.min(range.until ?? +now,+now))continue;
     total++;
     if(!strategies.includes(r.strategy) || !(r.groupSize>=2)){unknown++;continue;}
     if(invited+DAY>+now){pending++;continue;}
@@ -100,11 +100,17 @@ function buildReminderInsight(records,measurements,deliveries,now=new Date(),env
       a.initially_confirmed===0&&b.initially_confirmed===0);
     const dominates=(x,y)=>x.confirmation_rate>=y.confirmation_rate && x.median_minutes<y.median_minutes && x.notifications_per_activity<=y.notifications_per_activity;
     const winner=sufficient?(dominates(a,b)?a:dominates(b,a)?b:null):null;
-    return {size,sufficient:!!winner,strategy:winner?.strategy||null,
-      reason:winner?'observed-dominance':'insufficient sample or no clear joint improvement'};
+    return {size,sufficient,strategy:winner?.strategy||null,
+      reason:winner?'observed-dominance':sufficient?'no clear joint improvement':
+        a?.initially_confirmed || b?.initially_confirmed ? 'initial confirmations contaminate comparison' : 'insufficient sample'};
   });
-  return {schemaVersion:1,environment:env,source:'firestore-server-records',window_start:new Date(+now-30*DAY),window_end:now,updated_at:now,
+  const mature=result.reduce((n,r)=>n+r.activities,0), confirmed=result.reduce((n,r)=>n+r.confirmed,0);
+  const times=[...rows.values()].flatMap(r=>r.times);
+  return {schemaVersion:1,environment:env,source:'firestore-server-records',window_start:new Date(range.from ?? +now-30*DAY),window_end:new Date(range.until ?? +now),updated_at:now,
     total,pending,unknown,mature_activities:result.reduce((n,r)=>n+r.activities,0),by_strategy_size:result,decisions,
+    confirmed_activities:confirmed,confirmation_rate:percent(confirmed,mature),
+    median_minutes:quantile(times,.5),p95_minutes:quantile(times,.95),
+    notifications_per_activity:mature?result.reduce((n,r)=>n+r.notifications,0)/mature:null,
     observation_hours:24,channel:'in-app',minimum_sample_per_strategy:20,
     definition:'Activity first CONFIRMED from invitation, not RSVP consensus; observational comparison, not a causal claim.'};
 }

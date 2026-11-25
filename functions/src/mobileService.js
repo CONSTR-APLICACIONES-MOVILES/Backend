@@ -31,6 +31,9 @@ class MobileService {
   }
 
   getCommunityPeers(uid, input) { return this.community.getCommunityPeers(uid, input); }
+  getActivityAnalytics(uid, input) { return require('./activityAnalytics').getActivityAnalytics(this.db, input, this.clock()); }
+  getActivityDrafts(uid, input) { return new (require('./activityDrafts').ActivityDrafts)(this.db, {clock:this.clock}).getActivityDrafts(uid, input); }
+  syncActivityDraft(uid, input) { return new (require('./activityDrafts').ActivityDrafts)(this.db, {clock:this.clock}).syncActivityDraft(uid, input); }
   inviteGroupFriend(uid,input) { return new (require('./activityParticipants').ActivityParticipants)(this.db,{clock:this.clock}).inviteGroupFriend(uid,input); }
   getActivityParticipants(uid, input) { return new (require('./activityParticipants').ActivityParticipants)(this.db, {clock:this.clock}).getActivityParticipants(uid,input); }
   changeActivityParticipants(uid, input) { return new (require('./activityParticipants').ActivityParticipants)(this.db, {clock:this.clock}).changeActivityParticipants(uid,input); }

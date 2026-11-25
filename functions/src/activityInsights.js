@@ -57,8 +57,10 @@ async function recordCreationAttempt(db, uid, input, now = new Date()) {
   });
 }
 
-function buildCreationInsight(records, now = new Date(), env = 'production') {
-  const unique = new Map(records.filter(r => r.environment === env && inWindow(ms(r.startedAt),now))
+function buildCreationInsight(records, now = new Date(), env = 'production', range = {}) {
+  const from = range.from ?? +now - 30*DAY, until = range.until ?? +now;
+  const unique = new Map(records.filter(r => r.environment === env &&
+    ms(r.startedAt) >= from && ms(r.startedAt) <= Math.min(until, +now))
     .map(r => [`${r.uid}/${r.attemptId}`, r]));
   const counts = {success:0,failure:0,timeout:0,unresolved:0};
   let reconciledSuccess = 0, reconciledFailure = 0;
@@ -73,7 +75,7 @@ function buildCreationInsight(records, now = new Date(), env = 'production') {
       ['unavailable','network-request-failed','cancelled'].includes(r.errorCode) ? 'network' : 'other']++;
   }
   const attempts = unique.size;
-  return {...common(now,env), attempts, ...counts, failure_or_timeout_pct:pct(counts.failure+counts.timeout,attempts),
+  return {...common(now,env), window_start:new Date(from), window_end:new Date(until), attempts, ...counts, failure_or_timeout_pct:pct(counts.failure+counts.timeout,attempts),
     failure_pct:pct(counts.failure,attempts), timeout_pct:pct(counts.timeout,attempts),
     coverage_pct:pct(attempts-counts.unresolved,attempts), p95_duration_ms:percentile(durations,.95),
     logical_publications:new Set([...unique.values()].map(r=>`${r.uid}/${r.requestId}`)).size,
