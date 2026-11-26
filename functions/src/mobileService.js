@@ -7,6 +7,7 @@ const {CommunityService, canShare, effectiveStatus, defaults} = require('./commu
 const {ExpansionService} = require('./expansionService');
 const {additionalAlerts} = require('./alertEvents');
 const {prepareProposalComparison} = require('./coordinationInsights');
+const {AndesEvents, andesBusy, mergeBusy} = require('./andesEvents');
 
 const DAY = 1440 * MINUTE;
 function validDate(value) {
@@ -28,7 +29,12 @@ class MobileService {
     this.expansions = new ExpansionService(db, {clock, userLookup: this.userLookup});
     this.community = new CommunityService(db, {clock, userLookup: this.userLookup});
     this.social = new (require('./socialService').SocialService)(db,{clock,userLookup:this.userLookup});
+    this.andes = new AndesEvents(db, {clock});
   }
+
+  getAndesEvents(uid, input) { return this.andes.getAndesEvents(uid, input); }
+  addAndesEventToSchedule(uid, input) { return this.andes.addAndesEventToSchedule(uid, input); }
+  removeAndesEventFromSchedule(uid, input) { return this.andes.removeAndesEventFromSchedule(uid, input); }
 
   getCommunityPeers(uid, input) { return this.community.getCommunityPeers(uid, input); }
   getActivityAnalytics(uid, input) { return require('./activityAnalytics').getActivityAnalytics(this.db, input, this.clock()); }
@@ -136,7 +142,9 @@ class MobileService {
       const legacy = peers.get(ownerId);
       // Legacy Java blocks have no date. Never project them into future days.
       const busy = saved ? saved.busy : date === today && !legacy?.calendarSync && hasSchedule(legacy || {}) ? legacy.busy : null;
-      return {ownerId, known: busy !== null, busy: busy || [],
+      // Andes Events the person added count as busy too; only their minutes leave the server
+      const andes = await andesBusy(this.db, ownerId, date);
+      return {ownerId, known: busy !== null, busy: andes.length ? mergeBusy([...(busy || []), ...andes]) : busy || [],
         updatedAt: saved ? iso(saved.updatedAt) : null};
     }));
     return {date, timeZone: "America/Bogota", schedules};

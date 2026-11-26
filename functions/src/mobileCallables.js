@@ -24,6 +24,8 @@ const FIELDS = {
   updateActivityDetails: ['activityId', 'expectedVersion', 'fields'],
   cancelActivity: ['activityId', 'expectedVersion'],
   getScheduleFriends: ["groupId"], getScheduleDay: ["date", "friendIds"],
+  getAndesEvents: [], addAndesEventToSchedule: ["eventId", "start", "end", "location", "clientUserId"],
+  removeAndesEventFromSchedule: ["eventId", "clientUserId"],
   importCalendarAvailability: ["startDate", "days", "intervals"],
   getProfile: [], updateProfile: ["fields", "clientUserId"], getAlerts: ["includeChat"], getActivities: [],
   setActivityReminder: ["activityId", "minutesBefore"],

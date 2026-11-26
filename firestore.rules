@@ -169,6 +169,8 @@ service cloud.firestore {
     match /friendships/{pairId} { allow read, write: if false; }
     match /reminderMeasurements/{activityId} { allow read, write: if false; }
     match /reminderDeliveries/{deliveryId} { allow read, write: if false; }
+    // Andes Events added to Schedule: only the mobile callables read or write them (busy minutes reach friends)
+    match /andesSchedule/{userId}/{document=**} { allow read, write: if false; }
 
     // Reference data written by the seed script: where activities can happen, with coordinates.
     match /campusAreas/{areaId} {
