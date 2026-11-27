@@ -1,5 +1,9 @@
 # Activity analytics and dashboard
 
+## Interactive explorer — local changes, 2026-11-24
+
+BQ2/BQ3/BQ14 now have an interactive date/segment explorer, a new authenticated `getActivityAnalytics` callable, CSV generation and hardened legacy-card rendering. This implementation has **not** been deployed. See [dashboard-explorer.md](dashboard-explorer.md) for behavior, reproducible checks, fixture limitations and the selective deployment command. The cloud verification below is historical and does not establish deployment of the new explorer.
+
 ## Verified cloud connection — 2026-10-30
 
 The user subsequently authorized connection without a commit. Sources were downloaded from the deployed Cloud Functions and Hosting before publication. Only recordCreationAttempt, refreshActivityInsights and Hosting were deployed; team functions were preserved. The deployed dashboard retains **ParchApp login for every reader**. Any signed-in account can read; only orgAnalytics accounts can refresh. No anonymous Firestore access was published, and the existing cloud read rule was retained.

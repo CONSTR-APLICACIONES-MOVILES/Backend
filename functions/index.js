@@ -135,3 +135,16 @@ exports.activityChangesToInbox = onDocumentWritten(
       await recordActivityChange(getFirestore(), event.params.activityId,
         event.data?.before.data(), event.data?.after.data(), event.data?.after.updateTime?.toString(), event.data?.after.updateTime?.toDate());
     });
+
+// Sprint 4 chat: every new message becomes an alert for the other people of that chat
+exports.groupChatMessageToInbox = onDocumentCreated(
+    {document: 'groups/{groupId}/messages/{messageId}', region: 'us-central1'}, async event => {
+      const {recordChatMessage} = require('./src/chatAlerts');
+      await recordChatMessage(getFirestore(), {groupId: event.params.groupId}, event.params.messageId, event.data?.data());
+    });
+
+exports.directChatMessageToInbox = onDocumentCreated(
+    {document: 'directChats/{pairId}/messages/{messageId}', region: 'us-central1'}, async event => {
+      const {recordChatMessage} = require('./src/chatAlerts');
+      await recordChatMessage(getFirestore(), {pairId: event.params.pairId}, event.params.messageId, event.data?.data());
+    });

@@ -24,7 +24,7 @@ function loadQuery(fileName, projectId, dataset) {
 function buildSlotInsight(rows) {
   const sample = rows.reduce((sum, row) => sum + Number(row.presented), 0);
   const unchanged = rows.reduce((sum, row) => sum + Number(row.accepted_unchanged), 0);
-  const recommended = rows.filter((row) => Number(row.presented) > 0).sort((a, b) =>
+  const recommended = rows.filter((row) => Number(row.presented) > 0 && Number(row.slot_position) >= 0).sort((a, b) =>
     Number(b.accepted_unchanged) / Number(b.presented) - Number(a.accepted_unchanged) / Number(a.presented) ||
     Number(a.slot_position) - Number(b.slot_position));
   const enoughData = sample >= MIN_SAMPLE && unchanged > 0 && recommended.length > 0;
@@ -51,13 +51,14 @@ function buildRecommendationInsight(records) {
     if (record.outcome === 'MODIFIED') modified++;
     else if (record.outcome === 'NOT_SELECTED') notSelected++;
     else if (!record.outcome) undecided++;
-    const row = positions.get(record.position) ?? {
-      slot_position: record.position, presented: 0, accepted: 0, accepted_unchanged: 0,
+    const position = Number.isInteger(record.position) && record.position >= 0 && record.position < 10 ? record.position : -1;
+    const row = positions.get(position) ?? {
+      slot_position: position, presented: 0, accepted: 0, accepted_unchanged: 0,
     };
     row.presented++;
     if (["ACCEPTED_UNCHANGED", "MODIFIED"].includes(record.outcome)) row.accepted++;
     if (record.outcome === "ACCEPTED_UNCHANGED") row.accepted_unchanged++;
-    positions.set(record.position, row);
+    positions.set(position, row);
   }
   return {...buildSlotInsight([...positions.values()].sort((a, b) => a.slot_position - b.slot_position)),
     modified, not_selected:notSelected, undecided};

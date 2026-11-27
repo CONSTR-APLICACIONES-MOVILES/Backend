@@ -7,6 +7,7 @@ const {CommunityService, canShare, effectiveStatus, defaults} = require('./commu
 const {ExpansionService} = require('./expansionService');
 const {additionalAlerts} = require('./alertEvents');
 const {prepareProposalComparison} = require('./coordinationInsights');
+const {AndesEvents, andesBusy, mergeBusy} = require('./andesEvents');
 
 const DAY = 1440 * MINUTE;
 function validDate(value) {
@@ -28,9 +29,17 @@ class MobileService {
     this.expansions = new ExpansionService(db, {clock, userLookup: this.userLookup});
     this.community = new CommunityService(db, {clock, userLookup: this.userLookup});
     this.social = new (require('./socialService').SocialService)(db,{clock,userLookup:this.userLookup});
+    this.andes = new AndesEvents(db, {clock});
   }
 
+  getAndesEvents(uid, input) { return this.andes.getAndesEvents(uid, input); }
+  addAndesEventToSchedule(uid, input) { return this.andes.addAndesEventToSchedule(uid, input); }
+  removeAndesEventFromSchedule(uid, input) { return this.andes.removeAndesEventFromSchedule(uid, input); }
+
   getCommunityPeers(uid, input) { return this.community.getCommunityPeers(uid, input); }
+  getActivityAnalytics(uid, input) { return require('./activityAnalytics').getActivityAnalytics(this.db, input, this.clock()); }
+  getActivityDrafts(uid, input) { return new (require('./activityDrafts').ActivityDrafts)(this.db, {clock:this.clock}).getActivityDrafts(uid, input); }
+  syncActivityDraft(uid, input) { return new (require('./activityDrafts').ActivityDrafts)(this.db, {clock:this.clock}).syncActivityDraft(uid, input); }
   inviteGroupFriend(uid,input) { return new (require('./activityParticipants').ActivityParticipants)(this.db,{clock:this.clock}).inviteGroupFriend(uid,input); }
   getActivityParticipants(uid, input) { return new (require('./activityParticipants').ActivityParticipants)(this.db, {clock:this.clock}).getActivityParticipants(uid,input); }
   changeActivityParticipants(uid, input) { return new (require('./activityParticipants').ActivityParticipants)(this.db, {clock:this.clock}).changeActivityParticipants(uid,input); }
@@ -133,7 +142,9 @@ class MobileService {
       const legacy = peers.get(ownerId);
       // Legacy Java blocks have no date. Never project them into future days.
       const busy = saved ? saved.busy : date === today && !legacy?.calendarSync && hasSchedule(legacy || {}) ? legacy.busy : null;
-      return {ownerId, known: busy !== null, busy: busy || [],
+      // Andes Events the person added count as busy too; only their minutes leave the server
+      const andes = await andesBusy(this.db, ownerId, date);
+      return {ownerId, known: busy !== null, busy: andes.length ? mergeBusy([...(busy || []), ...andes]) : busy || [],
         updatedAt: saved ? iso(saved.updatedAt) : null};
     }));
     return {date, timeZone: "America/Bogota", schedules};
@@ -216,7 +227,7 @@ class MobileService {
     const fields = input.fields;
     requireThat(fields && typeof fields === "object" && !Array.isArray(fields), "invalid-argument", "Supply profile fields.");
     const strings = {name: 120, program: 160, campus: 160, university: 160, studentId: 80};
-    const allowed = [...Object.keys(strings), "semester", "year", "academicLevel", "status", "photoData"];
+    const allowed = [...Object.keys(strings), "semester", "year", "academicLevel", "status", "photoData", "photoUrl"];
     requireThat(Object.keys(fields).length > 0 && Object.keys(fields).every((k) => allowed.includes(k)),
         "invalid-argument", "Unsupported profile field.");
     for (const [key, limit] of Object.entries(strings)) {
@@ -236,6 +247,14 @@ class MobileService {
       const bytes = Buffer.from(encoded, "base64");
       requireThat(encoded.length % 4 === 0 && bytes.toString("base64") === encoded && bytes.length <= 130000,
           "invalid-argument", "Invalid photo encoding or size.");
+    }
+    if (fields.photoUrl !== undefined) {
+      const encodedUid = encodeURIComponent(uid);
+      const validUrl = typeof fields.photoUrl === "string" && fields.photoUrl.length <= 2048
+        && /^https:\/\/firebasestorage\.googleapis\.com\//.test(fields.photoUrl)
+        && (fields.photoUrl.includes(`profile_photos%2F${encodedUid}`)
+          || fields.photoUrl.includes(`profile_photos/${uid}`));
+      requireThat(validUrl, "invalid-argument", "Invalid photo URL.");
     }
     const before = await this.getProfile(uid);
     const groups = fields.name !== undefined ? await this.groups(uid) : [];
@@ -260,14 +279,17 @@ class MobileService {
     return {...before, ...fields, ...(fields.status !== undefined ? {statusExpiresAt: null} : {})};
   }
 
-  async getAlerts(uid) {
+  async getAlerts(uid, input = {}) {
+    requireThat(input.includeChat === undefined || typeof input.includeChat === "boolean",
+        "invalid-argument", "includeChat must be true or false.");
     const groups = await this.groups(uid);
     const pages = await Promise.all(groups.map((g) => this.db.collection("activities")
         .where("groupId", "==", g.id).orderBy("createdAt", "desc").limit(100).get()));
     const activities = pages.flatMap((s) => s.docs).filter((a) => a.data().createdBy !== uid && !a.data().cancelled &&
           (!a.data().participantIds || a.data().participantIds.includes(uid)))
         .sort((a, b) => Date.parse(iso(b.data().createdAt)) - Date.parse(iso(a.data().createdAt))).slice(0, 200);
-    const extra = await additionalAlerts(this.db,uid,groups,pages.flatMap(p=>p.docs),this.clock());
+    const extra = await additionalAlerts(this.db,uid,groups,pages.flatMap(p=>p.docs),this.clock(),
+        {includeChat: input.includeChat === true});
     if (!activities.length) return {alerts: extra.sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt)).slice(0,200)};
     const states = await this.db.getAll(...activities.map((a) => this.db.doc(`inboxes/${uid}/items/${a.id}`)));
     const invitations = activities.map((a, index) => ({kind: "invitation", id: a.id, title: a.data().title,
@@ -376,14 +398,14 @@ class MobileService {
   }
 
   async markNotificationEventsRead(uid, input) {
-    requireThat(Array.isArray(input.ids) && input.ids.every(id => /^(evt|grp|rem|friend)_[a-f0-9]{64}$/.test(id)), 'invalid-argument', 'Supply event notification IDs.');
+    requireThat(Array.isArray(input.ids) && input.ids.every(id => /^(evt|grp|rem|friend|chat)_[a-f0-9]{64}$/.test(id)), 'invalid-argument', 'Supply event notification IDs.');
     return this.markAlertsRead(uid,input);
   }
 
   async markAlertsRead(uid, input) {
     requireThat(Array.isArray(input.ids) && input.ids.length <= 200 && new Set(input.ids).size === input.ids.length,
         "invalid-argument", "Supply up to 200 distinct alert IDs.");
-    const currentAlerts = (await this.getAlerts(uid)).alerts;
+    const currentAlerts = (await this.getAlerts(uid, {includeChat: true})).alerts;
     const extraIds = new Set(currentAlerts.filter(a=>a.kind !== 'invitation').map(a=>a.id));
     await this.db.runTransaction(async (tx) => {
       for (const id of input.ids) {

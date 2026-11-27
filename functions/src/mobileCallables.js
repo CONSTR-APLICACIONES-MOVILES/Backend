@@ -2,6 +2,9 @@ const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {ServiceError} = require("./errors");
 const {requireOrganizationAnalytics} = require('./organizationAccess');
 const FIELDS = {
+  getActivityAnalytics: ['question','from','to','granularity','size','category','position','strategy','excludeInitial'],
+  getActivityDrafts: ['cursor'],
+  syncActivityDraft: ['id','operationId','expectedVersion','state','category','payload','requestId','clientUserId'],
   inviteGroupFriend:['groupId','userId','clientUserId'],
   getActivityParticipants:['activityId'], changeActivityParticipants:['activityId','action','userId','expectedVersion','clientUserId'],
   setUsername:['username','clientUserId'], searchPeople:['query','cursor','limit'],getPublicPerson:['userId'],
@@ -21,8 +24,10 @@ const FIELDS = {
   updateActivityDetails: ['activityId', 'expectedVersion', 'fields'],
   cancelActivity: ['activityId', 'expectedVersion'],
   getScheduleFriends: ["groupId"], getScheduleDay: ["date", "friendIds"],
+  getAndesEvents: [], addAndesEventToSchedule: ["eventId", "start", "end", "location", "clientUserId"],
+  removeAndesEventFromSchedule: ["eventId", "clientUserId"],
   importCalendarAvailability: ["startDate", "days", "intervals"],
-  getProfile: [], updateProfile: ["fields", "clientUserId"], getAlerts: [], getActivities: [],
+  getProfile: [], updateProfile: ["fields", "clientUserId"], getAlerts: ["includeChat"], getActivities: [],
   setActivityReminder: ["activityId", "minutesBefore"],
   markNotificationEventsRead: ["ids", "clientUserId"],
   markAlertsRead: ["ids", "clientUserId"], respondToActivityInvitation: ["id", "response", "expectedResponse", "clientUserId"],
