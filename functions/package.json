@@ -9,6 +9,7 @@
   "scripts": {
     "test": "node --test \"test/**/*.test.js\"",
     "seed": "node scripts/seed.js",
+    "seed-help": "node scripts/seed-help-faq.js",
     "serve": "firebase emulators:start --only functions,firestore,auth",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log"
