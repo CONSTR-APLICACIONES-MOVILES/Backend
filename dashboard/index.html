@@ -86,6 +86,7 @@
   <p class="status" id="status" role="status"></p>
   <main id="dashboard" hidden>
     <div class="grid" id="cards"></div>
+    <section id="bq10-explorer"></section>
   </main>
 
   <script type="module">
@@ -97,6 +98,7 @@
     import {getFunctions, connectFunctionsEmulator, httpsCallable}
       from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
     import {createActivityQuestions, compareQuestionIds} from "./activity-questions.mjs";
+    import {mountCategoryExplorer} from "./category-explorer.mjs";
     import {firebaseConfig, useEmulators, emulatorProjectId} from "./firebase-config.js";
 
 // on localhost we talk to the emulators with the demo project, in hosting we use the real project
@@ -387,9 +389,11 @@
       $("sign-out").hidden = !user;
       $("who").textContent = user ? user.email : "";
       if (user) await load();
+      if (user && allowed) bq10.run(); // BQ10 reads every activity, so only organization accounts
       if (user && !allowed) $("status").textContent += " · Read-only dashboard access";
     });
 
+    const bq10 = mountCategoryExplorer($("bq10-explorer"), httpsCallable(functions, "getCategoryConfirmation"));
     buildCards();
   </script>
 </body>

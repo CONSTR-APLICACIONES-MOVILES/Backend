@@ -31,6 +31,10 @@ const {MobileService} = require("./src/mobileService");
 const {createMobileCallables} = require("./src/mobileCallables");
 Object.assign(exports, createMobileCallables(new MobileService(getFirestore())));
 
+// bq10: activity categories and how many reach CONFIRMED, with filters (organization accounts only)
+const {categoryConfirmationCallable} = require('./src/categoryConfirmation');
+exports.getCategoryConfirmation = categoryConfirmationCallable(getFirestore);
+
 // Extends the same Firestore insights collection without replacing the team's
 // deployed BQ1/7/8/9 aggregator or its historical metric definitions.
 exports.refreshActivityInsights = onCall({region:'us-central1', invoker:'public'}, async request => {
