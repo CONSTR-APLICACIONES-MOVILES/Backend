@@ -127,4 +127,5 @@ function categoryConfirmationCallable(getDb) {
   });
 }
 
-module.exports = {summarize, validate, byDayOrWeek, sizeOf, getCategoryConfirmation, categoryConfirmationCallable, CATEGORIES};
+module.exports = {summarize, validate, byDayOrWeek, sizeOf, getCategoryConfirmation, categoryConfirmationCallable, CATEGORIES,
+  DAY, MAX_DAYS, dayStart, bogotaDate};
