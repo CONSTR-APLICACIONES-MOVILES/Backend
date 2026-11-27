@@ -148,6 +148,17 @@ test("analytics events are create-only for signed-in users", async () => {
   await assertFails(deleteDoc(doc(events, "e1")));
 });
 
+test("help questions are read only: signed-in users read, nobody writes", async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), "helpFaq/groups-create"),
+        {screen: "groups", question: "How do I create a group?", answer: "Tap Create new group.", position: 1, active: true});
+  });
+  await assertSucceeds(getDoc(doc(as("stranger"), "helpFaq/groups-create")));
+  await assertFails(getDoc(doc(anonymous(), "helpFaq/groups-create")));
+  await assertFails(setDoc(doc(as("alex"), "helpFaq/groups-create"), {question: "Fake"}));
+  await assertFails(deleteDoc(doc(as("alex"), "helpFaq/groups-create")));
+});
+
 test("campus areas are reference data: signed-in users read, nobody writes", async () => {
   await env.withSecurityRulesDisabled(async (context) => {
     await setDoc(doc(context.firestore(), "campusAreas/central_library"),

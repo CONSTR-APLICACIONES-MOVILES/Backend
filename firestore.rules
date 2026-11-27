@@ -143,6 +143,9 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Help questions of the Java app (Help screen). Read only: they are loaded with scripts/seed-help-faq.js.
+    match /helpFaq/{questionId} { allow read: if signedIn(); allow write: if false; }
+
     // Aggregates belong to the organization dashboard. Apps receive operational
     // recommendations through authenticated callables, not raw dashboard data.
     match /insights/{insightId} {
