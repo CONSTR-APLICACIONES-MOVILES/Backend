@@ -21,14 +21,18 @@ class ActivityParticipants {
     const {doc, activity, group, ids} = await this.context(this.db, uid, input.activityId);
     const organizer = activity.createdBy === uid;
     const responses = ids.length ? await this.db.getAll(...ids.map(id => this.db.doc(`inboxes/${id}/items/${input.activityId}`))) : [];
+    const displayedIds = group.memberIds.filter(id => organizer || ids.includes(id));
+    const profiles = displayedIds.length ? await this.db.getAll(...displayedIds.map(id => this.db.doc(`profiles/${id}`))) : [];
+    const photoById = new Map(displayedIds.map((id, index) => [id, profiles[index]?.data()?.photoUrl || null]));
     return {activityId: input.activityId, groupId: activity.groupId, version: versionOf(doc),
       canManage: organizer, cancelled: !!activity.cancelled, joined: ids.includes(uid),
       canInviteFriends: group.ownerId === uid,
       canJoin: !activity.cancelled && !ids.includes(uid),
-      members: group.memberIds.filter(id => organizer || ids.includes(id)).map(id => ({
+      members: displayedIds.map(id => ({
         id, name: (group.members || []).find(m => m.id === id)?.name || 'Group member',
         organizer: id === activity.createdBy, invited: ids.includes(id),
         response: id === activity.createdBy ? 'accepted' : responses[ids.indexOf(id)]?.data()?.response || null,
+        photoUrl: photoById.get(id) || null,
       }))};
   }
 

@@ -128,6 +128,17 @@ test("clients cannot forge verification, counters or arbitrary photo paths", asy
     await assert.rejects(call("updateProfile", {fields}), {code: "invalid-argument"});
   }
 });
+test("profile photo URLs are owned and stored", async () => {
+  const photoUrl = "https://firebasestorage.googleapis.com/v0/b/demo/o/profile_photos%2Fmember.jpg?alt=media";
+  await call("updateProfile", {fields: {photoUrl}});
+  assert.equal((await call("getProfile")).photoUrl, photoUrl);
+  for (const fields of [
+    {photoUrl: "http://evil.example/photo.jpg"},
+    {photoUrl: "https://firebasestorage.googleapis.com/v0/b/demo/o/profile_photos%2Fother.jpg?alt=media"},
+  ]) {
+    await assert.rejects(call("updateProfile", {fields}), {code: "invalid-argument"});
+  }
+});
 test("inbox uses real activities and read state persists for the caller only", async () => {
   const inbox = await call("getAlerts");
   assert.equal(inbox.alerts[0].id, "a1");

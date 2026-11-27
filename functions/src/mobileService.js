@@ -227,7 +227,7 @@ class MobileService {
     const fields = input.fields;
     requireThat(fields && typeof fields === "object" && !Array.isArray(fields), "invalid-argument", "Supply profile fields.");
     const strings = {name: 120, program: 160, campus: 160, university: 160, studentId: 80};
-    const allowed = [...Object.keys(strings), "semester", "year", "academicLevel", "status", "photoData"];
+    const allowed = [...Object.keys(strings), "semester", "year", "academicLevel", "status", "photoData", "photoUrl"];
     requireThat(Object.keys(fields).length > 0 && Object.keys(fields).every((k) => allowed.includes(k)),
         "invalid-argument", "Unsupported profile field.");
     for (const [key, limit] of Object.entries(strings)) {
@@ -247,6 +247,14 @@ class MobileService {
       const bytes = Buffer.from(encoded, "base64");
       requireThat(encoded.length % 4 === 0 && bytes.toString("base64") === encoded && bytes.length <= 130000,
           "invalid-argument", "Invalid photo encoding or size.");
+    }
+    if (fields.photoUrl !== undefined) {
+      const encodedUid = encodeURIComponent(uid);
+      const validUrl = typeof fields.photoUrl === "string" && fields.photoUrl.length <= 2048
+        && /^https:\/\/firebasestorage\.googleapis\.com\//.test(fields.photoUrl)
+        && (fields.photoUrl.includes(`profile_photos%2F${encodedUid}`)
+          || fields.photoUrl.includes(`profile_photos/${uid}`));
+      requireThat(validUrl, "invalid-argument", "Invalid photo URL.");
     }
     const before = await this.getProfile(uid);
     const groups = fields.name !== undefined ? await this.groups(uid) : [];

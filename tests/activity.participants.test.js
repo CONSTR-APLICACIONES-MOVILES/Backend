@@ -27,6 +27,13 @@ test('only members can read or join; only organizer can invite and remove',async
   await assert.rejects(call('changeActivityParticipants',{activityId:'plan',action:'join',expectedVersion:d.version},'outsider'),{code:'permission-denied'});
   await assert.rejects(call('changeActivityParticipants',{activityId:'plan',action:'join',expectedVersion:d.version,clientUserId:'member'},'other'),{code:'permission-denied'});
 });
+test('participant photo URLs come from the profile',async()=>{
+  const photo='https://firebasestorage.googleapis.com/v0/b/demo/o/profile_photos%2Fmember.jpg?alt=media';
+  await db.doc('profiles/member').set({photoUrl:photo});
+  const d=await details('owner');
+  assert.equal(d.members.find(m=>m.id==='member').photoUrl,photo);
+  assert.equal(d.members.find(m=>m.id==='other').photoUrl,null);
+});
 test('member joins without editing the session and records consent once',async()=>{
   const d=await details('member'),input={activityId:'plan',action:'join',expectedVersion:d.version};
   await call('changeActivityParticipants',input,'member');await call('changeActivityParticipants',input,'member');
