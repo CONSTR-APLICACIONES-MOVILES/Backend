@@ -4,6 +4,7 @@
 const CATEGORY_NAMES = {study: "Study", sports: "Sports", social: "Social", other: "Other", unknown: "No category"};
 const name = (category) => CATEGORY_NAMES[category] || category;
 const pct = (value) => value == null ? "n/a" : `${value}%`;
+const activitiesText = (count) => `${count} ${count === 1 ? "activity" : "activities"}`;
 
 const DAY = 86400000;
 // "today" and the dates of the presets in Bogota time, like the server, so both sides count the same days
@@ -32,6 +33,7 @@ const FORM = `
     <p class="status bq10-status" role="status">Choose the filters and press Apply.</p>
     <div class="stat-grid bq10-stats" hidden></div>
     <div class="chart" hidden><canvas></canvas></div>
+    <table class="segments bq10-cat-table" hidden></table>
     <table class="segments bq10-table" hidden></table>
     <p class="insight-note bq10-note" hidden></p>
   </div>`;
@@ -61,18 +63,52 @@ export function mountCategoryExplorer(container, call) {
       size: form.size.value, category: form.category.value};
   };
 
+  // the same checks as the server, with the same messages, so a bad range never reaches it
+  function rangeError(f) {
+    if (!f.from || !f.to) return "Choose a start and an end date.";
+    if (f.from > f.to) return "The start date must be before the end date.";
+    if ((Date.parse(`${f.to}T00:00:00Z`) - Date.parse(`${f.from}T00:00:00Z`)) / DAY + 1 > 90) return "The range can be at most 90 days.";
+    return null;
+  }
+
+  // takes away everything of the last answer: numbers, chart, tables and the CSV
+  function clear() {
+    last = null;
+    if (chart) { chart.destroy(); chart = null; }
+    $(".bq10-stats").hidden = true;
+    $(".bq10-stats").innerHTML = "";
+    $(".chart").hidden = true;
+    $(".bq10-cat-table").hidden = true;
+    $(".bq10-cat-table").innerHTML = "";
+    $(".bq10-table").hidden = true;
+    $(".bq10-table").innerHTML = "";
+    $(".bq10-note").hidden = true;
+    $(".bq10-csv").disabled = true;
+  }
+
   function draw(data) {
-    last = data;
     const s = data.summary;
+    if (s.total === 0) { // nothing to show: no zeros, no empty CSV
+      clear();
+      status.textContent = "No activities with these filters.";
+      return;
+    }
+    last = data;
     const stats = $(".bq10-stats");
     stats.hidden = false;
     stats.dataset.count = "4";
+    const oneCategory = s.by_category.length === 1;
     stats.innerHTML = [
       [s.most_used ? name(s.most_used) : "n/a", "Most used"],
-      [s.least_used ? name(s.least_used) : "n/a", "Least used"],
-      [s.total, "Activities"],
+      oneCategory ? ["Only one category in this range", "Least used", "font-size:14px"] : [s.least_used ? name(s.least_used) : "n/a", "Least used"],
+      [s.total, s.total === 1 ? "Activity" : "Activities"],
       [pct(s.confirmation_pct), "Reach Confirmed"],
-    ].map(([value, label]) => `<div class="stat"><strong>${value}</strong><span>${label}</span></div>`).join("");
+    ].map(([value, label, style = ""]) => `<div class="stat"><strong style="${style}">${value}</strong><span>${label}</span></div>`).join("");
+
+    const categoryTable = $(".bq10-cat-table");
+    categoryTable.hidden = s.by_category.length === 0;
+    categoryTable.innerHTML = `<tr><th>Category</th><th>Activities</th><th>Confirmed</th><th>% Confirmed</th></tr>` +
+      s.by_category.map((r) => `<tr><td>${name(r.category)}</td><td>${r.activities}</td><td>${r.confirmed}</td><td>${pct(r.confirmation_pct)}</td></tr>`).join("");
 
     $(".chart").hidden = s.by_category.length === 0;
     if (chart) chart.destroy();
@@ -104,18 +140,23 @@ export function mountCategoryExplorer(container, call) {
     const note = $(".bq10-note");
     note.hidden = false;
     note.textContent = data.explanation + (data.truncated ? " Only the first 10000 activities were read: narrow the period." : "");
-    status.textContent = s.total ? `${s.total} activities from ${data.filters.from} to ${data.filters.to}` : "No activities with these filters.";
+    status.textContent = s.total ? `${activitiesText(s.total)} from ${data.filters.from} to ${data.filters.to}` : "No activities with these filters.";
     $(".bq10-csv").disabled = false;
   }
 
   async function run() {
     const mine = ++requestNumber; // only the last answer is drawn
+    clear(); // the answer of before must not stay on the screen while the new one comes, or after an error
+    const f = filters();
+    const problem = rangeError(f);
+    if (problem) { status.textContent = problem; return; }
     status.textContent = "Reading the activities…";
     try {
-      const result = await call(filters());
+      const result = await call(f);
       if (mine === requestNumber) draw(result.data);
     } catch (error) {
       if (mine !== requestNumber) return;
+      clear();
       // organization accounts only: a normal account sees a clear message and the rest of the dashboard keeps working
       status.textContent = error.code === "functions/permission-denied"
         ? "BQ10 needs an organization account (orgAnalytics)." : `Could not read BQ10: ${error.message}`;

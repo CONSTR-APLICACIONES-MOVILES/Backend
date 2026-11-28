@@ -47,9 +47,10 @@ function validate(input = {}, now = new Date()) {
   const fromText = input.from ?? bogotaDate(dayStart(toText) - 29 * DAY);
   const from = dayStart(fromText);
   const to = dayStart(toText);
+  requireThat(fromText !== "" && toText !== "", "invalid-argument", "Choose a start and an end date.");
   requireThat(from !== null && to !== null, "invalid-argument", "Dates must look like 2026-11-26.");
-  requireThat(from <= to, "invalid-argument", "The start date must not be after the end date.");
-  requireThat((to - from) / DAY + 1 <= MAX_DAYS, "invalid-argument", `Choose at most ${MAX_DAYS} days.`);
+  requireThat(from <= to, "invalid-argument", "The start date must be before the end date.");
+  requireThat((to - from) / DAY + 1 <= MAX_DAYS, "invalid-argument", `The range can be at most ${MAX_DAYS} days.`);
   return {from, until: to + DAY, fromDate: fromText, toDate: toText, granularity, size, category};
 }
 
@@ -65,7 +66,8 @@ function summarize(activities) {
   return {by_category: rows, total: activities.length, confirmed,
     confirmation_pct: activities.length ? Math.round((confirmed / activities.length) * 1000) / 10 : null,
     most_used: rows.length ? rows[0].category : null,
-    least_used: rows.length ? rows[rows.length - 1].category : null};
+    // with one category there is nothing "least used": the page says so instead of repeating the same category
+    least_used: rows.length > 1 ? rows[rows.length - 1].category : null};
 }
 
 const millisOf = (activity) => {

@@ -32,6 +32,23 @@ test("summary of nothing has no ranking and no percentage", () => {
     most_used: null, least_used: null});
 });
 
+test("with only one category it is the most used and there is no least used", () => {
+  const result = summarize([activity("study", "CONFIRMED"), activity("study", "PROPOSED")]);
+  assert.equal(result.most_used, "study");
+  assert.equal(result.least_used, null);
+  const two = summarize([activity("study", "CONFIRMED"), activity("study", "PROPOSED"), activity("sports", "PROPOSED")]);
+  assert.equal(two.least_used, "sports"); // with two categories both are still ranked
+});
+
+test("a bad date range answers with a clear message", () => {
+  const message = (input) => { try { validate(input, NOW); } catch (error) { return error.message; } return null; };
+  assert.equal(message({from: "", to: ""}), "Choose a start and an end date.");
+  assert.equal(message({from: "", to: "2026-11-26"}), "Choose a start and an end date.");
+  assert.equal(message({from: "2026-11-20", to: ""}), "Choose a start and an end date.");
+  assert.equal(message({from: "2026-11-20", to: "2026-11-10"}), "The start date must be before the end date.");
+  assert.equal(message({from: "2026-08-01", to: "2026-11-26"}), "The range can be at most 90 days.");
+});
+
 test("group size buckets", () => {
   assert.deepEqual([1, 2, 3, 4, 6, 7, 20].map(sizeOf), ["solo", "2-3", "2-3", "4-6", "4-6", "7+", "7+"]);
   assert.equal(sizeOf(undefined), "unknown");
