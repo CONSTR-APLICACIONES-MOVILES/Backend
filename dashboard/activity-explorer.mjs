@@ -4,6 +4,7 @@ const position=n=>n>=0?`Position ${n+1}`:'Unknown position';
 const delay=s=>s==='single_after_30_min'?'30 min':'60 min';
 export const METRICS={bq2:[['rate','Failure / timeout %'],['volume','Attempt outcomes'],['latency','p95 duration (ms)']],
   bq3:[['rate','Accepted unchanged %'],['volume','Presented vs unchanged']],
+  bq9:[['volume','Created vs confirmed'],['rate','Confirmation %'],['usage','Compare usage %']],
   bq14:[['speed','Median confirmation time (min)'],['rate','Confirmation %'],['alerts','Alerts per plan'],['volume','Mature vs pending plans']]};
 
 export function explorerView(data,metric=METRICS[data.question][0][0]) {
@@ -28,6 +29,20 @@ export function explorerView(data,metric=METRICS[data.question][0][0]) {
     chart={labels:t.map(r=>r.date),datasets:metric==='volume'?[
       line('Presented',t.map(r=>r.sample_size),'#64748b'),line('Accepted unchanged',t.map(r=>r.accepted_recommendations_unchanged),'#2563eb')]:[
       line('Accepted unchanged %',t.map(r=>r.pct_unchanged_overall),'#2563eb')]};
+  } else if(data.question==='bq9') {
+    const withCompare=s.compared,withoutCompare=s.direct;
+    stats=[['Compare use',number(s.comparison_rate,'%')],['Confirmed with',number(withCompare.confirmation_pct,'%')],
+      ['Confirmed without',number(withoutCompare.confirmation_pct,'%')],['Difference',number(s.difference_pp,' pp')]];
+    headers=['Cohort date','Created','Known','Compare use %','With compare','Confirmed with %','Without compare','Confirmed without %','Difference pp'];
+    rows=t.map(r=>[r.date,r.total_activities,r.known,r.comparison_rate,r.compared.created,r.compared.confirmation_pct,
+      r.direct.created,r.direct.confirmation_pct,r.difference_pp]);
+    breakdown={headers:['Segment','Created','Known','Compare use %','Confirmed with %','Confirmed without %'],
+      rows:[...s.by_category.map(r=>[`Category: ${r.segment}`,r.total_activities,r.known,r.comparison_rate,r.compared.confirmation_pct,r.direct.confirmation_pct]),
+        ...s.by_size.map(r=>[`Size: ${r.segment}`,r.total_activities,r.known,r.comparison_rate,r.compared.confirmation_pct,r.direct.confirmation_pct])]};
+    chart={labels:t.map(r=>r.date),datasets:metric==='volume'?[
+      line('Created',t.map(r=>r.total_activities),'#64748b'),line('Confirmed',t.map(r=>r.confirmed),'#10b981')]:
+      metric==='usage'?[line('Compare use %',t.map(r=>r.comparison_rate),'#2563eb')]:
+      [line('With compare %',t.map(r=>r.compared.confirmation_pct),'#2563eb'),line('Without compare %',t.map(r=>r.direct.confirmation_pct),'#f59e0b')]};
   } else {
     stats=[['Mature plans',number(s.mature_activities)],['Median time',number(s.median_minutes,' min')],['Alerts per plan',number(s.notifications_per_activity)],['Pending / unknown',`${number(s.pending)} / ${number(s.unknown)}`]];
     headers=['Invitation date','Total','Mature','Confirmed','Pending','Unknown','Confirmation %','Median min','p95 min','Alerts / plan'];
@@ -58,9 +73,9 @@ const today=()=>{
 const shift=(day,days)=>new Date(Date.parse(`${day}T12:00:00Z`)+days*86400000).toISOString().slice(0,10);
 
 export function mountActivityExplorer({root,query,Chart}) {
-  root.innerHTML=`<div class="lab-heading"><div><p class="eyebrow">ACTIVITY ANALYTICS</p><h2>Explore beyond the headline</h2><p>Follow trends, narrow a cohort and inspect the numbers behind BQ2, BQ3 and BQ14.</p></div><span class="badge">Bogotá · GMT−5</span></div>
+  root.innerHTML=`<div class="lab-heading"><div><p class="eyebrow">ACTIVITY ANALYTICS</p><h2>Explore beyond the headline</h2><p>Follow trends, narrow a cohort and inspect the numbers behind BQ2, BQ3, BQ9 and BQ14.</p></div><span class="badge">Bogotá · GMT−5</span></div>
   <form class="lab-filters">
-    <label>Question<select name="question"><option value="bq2">BQ2 · Creation reliability</option><option value="bq3">BQ3 · Suggested time acceptance</option><option value="bq14">BQ14 · Reminder effectiveness</option></select></label>
+    <label>Question<select name="question"><option value="bq2">BQ2 · Creation reliability</option><option value="bq3">BQ3 · Suggested time acceptance</option><option value="bq9">BQ9 - Compare usage and confirmation</option><option value="bq14">BQ14 · Reminder effectiveness</option></select></label>
     <label>Period<select name="period"><option value="7">Last 7 days</option><option value="14">Last 14 days</option><option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option><option value="custom">Custom dates</option></select></label>
     <label>From<input name="from" type="date" required></label><label>Through<input name="to" type="date" required></label>
     <label>Group by<select name="granularity"><option value="day">Day</option><option value="week">Week · Monday</option></select></label>
@@ -68,6 +83,8 @@ export function mountActivityExplorer({root,query,Chart}) {
     <label data-category hidden>Category<select name="category"><option value="all">All categories</option><option>study</option><option>sports</option><option>social</option><option>other</option><option value="unknown">Unknown category</option></select></label>
     <label data-position hidden>Position<select name="position"><option value="all">All positions</option>${Array.from({length:10},(_,i)=>`<option value="${i}">Position ${i+1}</option>`).join('')}</select></label>
     <label data-strategy hidden>Reminder<select name="strategy"><option value="all">Both strategies</option><option value="single_after_30_min">After 30 min</option><option value="single_after_60_min">After 60 min</option></select></label>
+    <label data-comparison hidden>Compare usage<select name="comparison"><option value="all">All activities</option><option value="with_comparison">With comparison</option><option value="without_comparison">Without comparison</option><option value="unknown">Unknown</option></select></label>
+    <label data-window hidden>Confirmation window<select name="confirmationDays"><option value="1">24 hours</option><option value="7" selected>7 days</option><option value="30">30 days</option></select></label>
     <label data-initial hidden class="lab-check"><input name="excludeInitial" type="checkbox" checked>Exclude plans already confirmed at invitation</label>
     <div class="lab-actions"><button class="primary" type="submit">Apply filters</button><button class="secondary" type="button" data-reset>Reset</button></div>
   </form>
@@ -86,8 +103,14 @@ export function mountActivityExplorer({root,query,Chart}) {
   period();
   function configure(){
     const q=field('question').value;
-    for(const name of ['size','category','position','strategy','initial'])root.querySelector(`[data-${name}]`).hidden=
-      name==='size'?q==='bq2':['category','position'].includes(name)?q!=='bq3':q!=='bq14';
+    for(const name of ['size','category','position','strategy','initial','comparison','window'])root.querySelector(`[data-${name}]`).hidden=true;
+    if(['bq3','bq9','bq14'].includes(q))root.querySelector('[data-size]').hidden=false;
+    if(['bq3','bq9'].includes(q))root.querySelector('[data-category]').hidden=false;
+    if(q==='bq3')root.querySelector('[data-position]').hidden=false;
+    if(q==='bq14')root.querySelector('[data-strategy]').hidden=false;
+    if(q==='bq14')root.querySelector('[data-initial]').hidden=false;
+    if(q==='bq9')root.querySelector('[data-comparison]').hidden=false;
+    if(q==='bq9')root.querySelector('[data-window]').hidden=false;
     metric.replaceChildren(...METRICS[q].map(([value,label])=>new Option(label,value)));
   }
   configure();
@@ -128,6 +151,7 @@ export function mountActivityExplorer({root,query,Chart}) {
     const q=field('question').value,input={question:q,from:field('from').value,to:field('to').value,granularity:field('granularity').value};
     if(q!=='bq2')input.size=field('size').value;
     if(q==='bq3'){input.category=field('category').value;input.position=field('position').value==='all'?'all':Number(field('position').value);}
+    if(q==='bq9'){input.category=field('category').value;input.comparison=field('comparison').value;input.confirmationDays=Number(field('confirmationDays').value);}
     if(q==='bq14'){input.strategy=field('strategy').value;input.excludeInitial=field('excludeInitial').checked;}
     const token=++generation;data=null;results.hidden=true;chart?.destroy();chart=null;status.textContent='Loading filtered server measurements…';
     form.querySelector('[type=submit]').disabled=true;
@@ -135,7 +159,9 @@ export function mountActivityExplorer({root,query,Chart}) {
       status.textContent=response.matched?`Updated ${new Date(response.updatedAt).toLocaleTimeString()} · ${response.environment==='test'?'TEST DATA · ':''}aggregated server records only`:
         'No measurements match these filters. Broaden the dates or segments; no rate can be inferred.';render();
     }catch(error){if(token!==generation)return;
-      status.textContent=/invalid-argument|resource-exhausted/.test(error.code||'')
+      status.textContent=error.code==='permission-denied'
+        ? 'BQ9 needs an organization analytics account. Sign in with an orgAnalytics user; the other questions remain available.'
+        : /invalid-argument|resource-exhausted/.test(error.code||'')
         ? `${error.message} Change the filters and apply again.`
         : `Could not explore: ${error.message||'request failed'}. The getActivityAnalytics backend must be deployed and reachable. Summary cards remain available below.`;}
     finally{if(token===generation)form.querySelector('[type=submit]').disabled=false;}

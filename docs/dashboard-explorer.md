@@ -1,4 +1,8 @@
-# Explorador de BQ2, BQ3 y BQ14
+# Explorador de BQ2, BQ3, BQ9 y BQ14
+
+## BQ9: comparacion y confirmacion con filtros
+
+BQ9 se puede filtrar por fechas, agrupacion por dia o semana, tamano de grupo, categoria, uso de comparacion (todas, con comparacion, sin comparacion o desconocido) y ventana de confirmacion (24 horas, 7 dias o 30 dias). La fuente es `activities` unida con `coordinationMeasurements`; el backend solo devuelve agregados y exige el claim `orgAnalytics`. Los registros con comparacion desconocida no entran en los denominadores de comparacion y confirmacion.
 
 ## Qué cambió
 
