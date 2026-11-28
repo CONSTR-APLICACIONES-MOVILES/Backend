@@ -73,12 +73,33 @@ test("test data can be read alone or together with the real data", async () => {
   assert.equal(all.summary.total_flows, 5);
 });
 
+test("steps that stop the same number of attempts are all reported as a tie, in the order of the form", async () => {
+  // from the dashboard a3 stops at opened and a1 at duration: one each
+  const tie = await getCreationFunnel(fakeDb(EVENTS), {entry: "dashboard"}, NOW);
+  assert.deepEqual(tie.summary.most_abandoned_steps, ["opened", "duration"]);
+  assert.equal(tie.summary.most_abandoned_step, "opened"); // the old field keeps naming the first one
+  assert.deepEqual(tie.timeline[0].most_abandoned_steps, ["duration"]); // day 20: a1 stops at duration, a2 finished
+  const single = await getCreationFunnel(fakeDb(EVENTS), {entry: "group_details"}, NOW);
+  assert.deepEqual(single.summary.most_abandoned_steps, ["place"]);
+  const nobody = await getCreationFunnel(fakeDb([started("f1", "2026-11-20T17:00:00Z"), finished("f1", "2026-11-20T17:05:00Z")]), {}, NOW);
+  assert.deepEqual(nobody.summary.most_abandoned_steps, []);
+});
+
 test("the step where most attempts stop is reported", async () => {
   const result = await getCreationFunnel(fakeDb(EVENTS), {entry: "dashboard"}, NOW);
   // a1 stops at step 3 (duration), a3 at step 0 (opened), a2 finished
   assert.equal(result.summary.total_flows, 3);
   assert.equal(result.summary.steps.find((s) => s.name === "opened").abandoned, 1);
   assert.equal(result.summary.steps.find((s) => s.name === "duration").abandoned, 1);
+});
+
+test("a bad date range answers with a clear message", () => {
+  const message = (input) => { try { validate(input, NOW); } catch (error) { return error.message; } return null; };
+  assert.equal(message({from: "", to: ""}), "Choose a start and an end date.");
+  assert.equal(message({from: "", to: "2026-11-26"}), "Choose a start and an end date.");
+  assert.equal(message({from: "2026-11-20", to: ""}), "Choose a start and an end date.");
+  assert.equal(message({from: "2026-11-20", to: "2026-11-10"}), "The start date must be before the end date.");
+  assert.equal(message({from: "2026-08-01", to: "2026-11-26"}), "The range can be at most 90 days.");
 });
 
 test("filters reject reversed dates, more than 90 days, fake dates and values outside the lists", () => {

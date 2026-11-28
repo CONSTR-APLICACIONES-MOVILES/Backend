@@ -32,9 +32,10 @@ function validate(input = {}, now = new Date()) {
   const fromText = input.from ?? bogotaDate(dayStart(toText) - 29 * DAY);
   const from = dayStart(fromText);
   const to = dayStart(toText);
+  requireThat(fromText !== "" && toText !== "", "invalid-argument", "Choose a start and an end date.");
   requireThat(from !== null && to !== null, "invalid-argument", "Dates must look like 2026-11-26.");
-  requireThat(from <= to, "invalid-argument", "The start date must not be after the end date.");
-  requireThat((to - from) / DAY + 1 <= MAX_DAYS, "invalid-argument", `Choose at most ${MAX_DAYS} days.`);
+  requireThat(from <= to, "invalid-argument", "The start date must be before the end date.");
+  requireThat((to - from) / DAY + 1 <= MAX_DAYS, "invalid-argument", `The range can be at most ${MAX_DAYS} days.`);
   return {from, until: to + DAY, fromDate: fromText, toDate: toText, granularity, entry, data};
 }
 
@@ -44,6 +45,15 @@ function periodOf(millis, granularity) {
   if (granularity === "day") return day;
   const weekday = new Date(`${day}T00:00:00Z`).getUTCDay(); // 0 is Sunday
   return bogotaDate(dayStart(day) - ((weekday + 6) % 7) * DAY);
+}
+
+// buildCreationAbandonment names only one step when several stop the same number of attempts (the first of the form);
+// this adds the list of all the steps with that top number, in the order of the form, empty when nobody abandoned
+function withTies(summary) {
+  const top = Math.max(0, ...summary.steps.map((step) => step.abandoned));
+  const tied = top > 0 ? [...summary.steps].filter((step) => step.abandoned === top)
+      .sort((a, b) => a.index - b.index).map((step) => step.name) : [];
+  return {...summary, most_abandoned_steps: tied};
 }
 
 // one flow is every event with the same flow_id; it belongs to the period where it started
@@ -85,8 +95,8 @@ async function getCreationFunnel(db, input = {}, now = new Date()) {
   }
   return {
     filters: {from: f.fromDate, to: f.toDate, granularity: f.granularity, entry: f.entry, data: f.data},
-    summary: buildCreationAbandonment(flows.flatMap((flow) => flow.events)),
-    timeline: [...byPeriod.keys()].sort().map((period) => ({period, ...buildCreationAbandonment(byPeriod.get(period))})),
+    summary: withTies(buildCreationAbandonment(flows.flatMap((flow) => flow.events))),
+    timeline: [...byPeriod.keys()].sort().map((period) => ({period, ...withTies(buildCreationAbandonment(byPeriod.get(period)))})),
     entry_points: entryPoints,
     truncated: snapshot.size >= MAX_EVENTS,
     explanation: "An attempt starts when the New Activity form opens and counts as abandoned if the activity is never created. " +
@@ -110,4 +120,4 @@ function creationFunnelCallable(getDb) {
   });
 }
 
-module.exports = {validate, groupFlows, getCreationFunnel, creationFunnelCallable};
+module.exports = {validate, groupFlows, withTies, getCreationFunnel, creationFunnelCallable};

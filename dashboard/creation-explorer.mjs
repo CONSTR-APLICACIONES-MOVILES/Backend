@@ -7,6 +7,14 @@ const ENTRY_NAMES = {dashboard: "Home", group_details: "Group details", groups: 
 const stepName = (name) => STEP_NAMES[name] || name;
 const entryName = (name) => ENTRY_NAMES[name] || name;
 const pct = (value) => value == null ? "n/a" : `${value}%`;
+// "Details", or "Details and Group (tie)" when several steps stop the same number of attempts
+const topSteps = (row) => {
+  const names = (row.most_abandoned_steps && row.most_abandoned_steps.length ? row.most_abandoned_steps : [row.most_abandoned_step])
+    .filter(Boolean).map(stepName);
+  if (names.length === 0) return "n/a";
+  const text = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  return names.length > 1 ? `${text} (tie)` : text;
+};
 
 const DAY = 86400000;
 // "today" and the dates of the presets in Bogota time, like the server, so both sides count the same days
@@ -67,19 +75,45 @@ export function mountCreationExplorer(container, call) {
     form.entry.value = chosen;
   }
 
+  // the same checks as the server, with the same messages, so a bad range never reaches it
+  function rangeError(f) {
+    if (!f.from || !f.to) return "Choose a start and an end date.";
+    if (f.from > f.to) return "The start date must be before the end date.";
+    if ((Date.parse(`${f.to}T00:00:00Z`) - Date.parse(`${f.from}T00:00:00Z`)) / DAY + 1 > 90) return "The range can be at most 90 days.";
+    return null;
+  }
+
+  // takes away everything of the last answer: numbers, chart, table and the CSV
+  function clear() {
+    last = null;
+    if (chart) { chart.destroy(); chart = null; }
+    $(".bq7-stats").hidden = true;
+    $(".bq7-stats").innerHTML = "";
+    $(".chart").hidden = true;
+    $(".bq7-table").hidden = true;
+    $(".bq7-table").innerHTML = "";
+    $(".bq7-note").hidden = true;
+    $(".bq7-csv").disabled = true;
+  }
+
   function draw(data) {
-    last = data;
     const s = data.summary;
     fillEntryPoints(data.entry_points, data.filters.entry);
+    if (s.total_flows === 0) { // nothing to show: no zeros, no empty CSV
+      clear();
+      status.textContent = "No attempts with these filters.";
+      return;
+    }
+    last = data;
     const stats = $(".bq7-stats");
     stats.hidden = false;
     stats.dataset.count = "4";
     stats.innerHTML = [
-      [s.most_abandoned_step ? stepName(s.most_abandoned_step) : "n/a", "Step with most abandons"],
+      [topSteps(s), "Step with most abandons", s.most_abandoned_steps && s.most_abandoned_steps.length > 1 ? "font-size:18px" : ""],
       [pct(s.total_flows ? s.abandon_rate : null), "Abandoned"],
-      [s.total_flows, "Attempts"],
+      [s.total_flows, s.total_flows === 1 ? "Attempt" : "Attempts"],
       [pct(s.total_flows ? Math.round(1000 * s.total_finished / s.total_flows) / 10 : null), "Finished"],
-    ].map(([value, label]) => `<div class="stat"><strong>${value}</strong><span>${label}</span></div>`).join("");
+    ].map(([value, label, style = ""]) => `<div class="stat"><strong style="${style}">${value}</strong><span>${label}</span></div>`).join("");
 
     const steps = [...s.steps].sort((a, b) => a.index - b.index);
     $(".chart").hidden = s.total_flows === 0;
@@ -100,25 +134,29 @@ export function mountCreationExplorer(container, call) {
     table.hidden = data.timeline.length === 0;
     const head = `<tr><th>${data.filters.granularity === "week" ? "Week of" : "Day"}</th><th>Attempts</th><th>Finished</th><th>Abandoned</th><th>Step with most abandons</th></tr>`;
     const rows = data.timeline.map((r) =>
-      `<tr><td>${r.period}</td><td>${r.total_flows}</td><td>${r.total_finished}</td><td>${pct(r.abandon_rate)}</td><td>${r.most_abandoned_step ? stepName(r.most_abandoned_step) : "n/a"}</td></tr>`);
+      `<tr><td>${r.period}</td><td>${r.total_flows}</td><td>${r.total_finished}</td><td>${pct(r.abandon_rate)}</td><td>${topSteps(r)}</td></tr>`);
     table.innerHTML = head + rows.join("");
 
     const note = $(".bq7-note");
     note.hidden = false;
     note.textContent = data.explanation + (data.truncated ? " Only the first 20000 events were read: narrow the period." : "");
-    status.textContent = s.total_flows
-      ? `${s.total_flows} attempts from ${data.filters.from} to ${data.filters.to}` : "No attempts with these filters.";
+    status.textContent = `${s.total_flows} ${s.total_flows === 1 ? "attempt" : "attempts"} from ${data.filters.from} to ${data.filters.to}`;
     $(".bq7-csv").disabled = false;
   }
 
   async function run() {
     const mine = ++requestNumber; // only the last answer is drawn
+    clear(); // the answer of before must not stay on the screen while the new one comes, or after an error
+    const f = filters();
+    const problem = rangeError(f);
+    if (problem) { status.textContent = problem; return; }
     status.textContent = "Reading the attempts…";
     try {
-      const result = await call(filters());
+      const result = await call(f);
       if (mine === requestNumber) draw(result.data);
     } catch (error) {
       if (mine !== requestNumber) return;
+      clear();
       // organization accounts only: a normal account sees a clear message and the rest of the dashboard keeps working
       status.textContent = error.code === "functions/permission-denied"
         ? "BQ7 needs an organization account (orgAnalytics)." : `Could not read BQ7: ${error.message}`;
