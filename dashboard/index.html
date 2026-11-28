@@ -230,7 +230,8 @@
           const withoutCompare = data.groups.find((row) => row.usage === "without_comparison");
           return {
             number: `${data.comparison_rate}%`,
-            detail: `of ${data.total_activities} activities used Compare · ${withCompare.confirmation_pct}% confirmed with it, ${withoutCompare.confirmation_pct}% without`,
+            detail: `of ${data.total_activities} activities used Compare — ${withCompare.confirmation_pct}% confirmed with it, ${withoutCompare.confirmation_pct}% without`,
+            method: "Use the activity explorer above, choose BQ9, and filter by period, group size, category, comparison usage and confirmation window.",
             chart: {
               labels: ["With Compare", "Without Compare"],
               datasets: [

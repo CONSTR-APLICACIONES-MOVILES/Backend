@@ -1,5 +1,11 @@
 # Activity analytics and dashboard
 
+## BQ9 explorer with filters (2026-11-27)
+
+BQ9 is now available in the activity explorer next to BQ2, BQ3 and BQ14. It can be filtered by period, day/week cohorts, group size, category, comparison usage (all, with comparison, without comparison or unknown) and confirmation window (24 hours, 7 days or 30 days). The explorer returns only aggregates and keeps unknown comparison records out of the comparison/confirmation denominators; the timeline includes empty buckets with no invented rate.
+
+The source is the `activities` collection joined with `coordinationMeasurements`, so filters can use the activity category and `planningContext.groupSizeAtCreation`. The callable is `getActivityAnalytics({question: "bq9", ...})`; BQ9 requires the organization analytics claim. Unit coverage is in `functions/test/activityAnalytics.test.js`.
+
 ## Interactive explorer — local changes, 2026-11-24
 
 BQ2/BQ3/BQ14 now have an interactive date/segment explorer, a new authenticated `getActivityAnalytics` callable, CSV generation and hardened legacy-card rendering. This implementation has **not** been deployed. See [dashboard-explorer.md](dashboard-explorer.md) for behavior, reproducible checks, fixture limitations and the selective deployment command. The cloud verification below is historical and does not establish deployment of the new explorer.

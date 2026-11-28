@@ -2,7 +2,7 @@ const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {ServiceError} = require("./errors");
 const {requireOrganizationAnalytics} = require('./organizationAccess');
 const FIELDS = {
-  getActivityAnalytics: ['question','from','to','granularity','size','category','position','strategy','excludeInitial'],
+  getActivityAnalytics: ['question','from','to','granularity','size','category','position','strategy','excludeInitial','comparison','confirmationDays'],
   getActivityDrafts: ['cursor'],
   syncActivityDraft: ['id','operationId','expectedVersion','state','category','payload','requestId','clientUserId'],
   inviteGroupFriend:['groupId','userId','clientUserId'],
@@ -37,6 +37,7 @@ function createMobileCallables(service) {
     onCall({region: "us-central1", ...(name === 'recordCreationAttempt' ? {invoker:'public'} : {})}, async (request) => {
       if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to continue.");
       if (name === 'getCoordinationInsight') requireOrganizationAnalytics(request);
+      if (name === 'getActivityAnalytics' && request.data?.question === 'bq9') requireOrganizationAnalytics(request);
       if (request.data?.clientUserId !== undefined && request.data.clientUserId !== request.auth.uid) {
         throw new HttpsError("permission-denied", "This pending operation belongs to another account.");
       }

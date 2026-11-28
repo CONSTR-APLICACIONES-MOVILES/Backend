@@ -4,6 +4,7 @@ const {asDate} = require('./coordinationInsights');
 const {buildCreationInsight,environment} = require('./activityInsights');
 const {buildRecommendationInsight} = require('./insights');
 const {buildReminderInsight} = require('./reminderInsights');
+const {buildCoordinationAnalytics} = require('./coordinationAnalytics');
 const DAY=86400000, MAX_ROWS=10000;
 const sizes=['solo','2-3','4-6','7+','unknown'];
 const sizeOf=n=>!Number.isInteger(n)||n<1?'unknown':n===1?'solo':n<=3?'2-3':n<=6?'4-6':'7+';
@@ -14,12 +15,14 @@ function date(value) {
   return value;
 }
 function filters(input={},now=new Date()) {
-  requireThat(['bq2','bq3','bq14'].includes(input.question),'invalid-argument','Choose BQ2, BQ3 or BQ14.');
+  requireThat(['bq2','bq3','bq9','bq14'].includes(input.question),'invalid-argument','Choose BQ2, BQ3, BQ9 or BQ14.');
   const from=date(input.from ?? localDate(new Date(+now-29*DAY))), to=date(input.to ?? localDate(now));
   requireThat(from<=to && to<=localDate(now) && dayStart(to)-dayStart(from)<90*DAY,
     'invalid-argument','Choose an ordered range of at most 90 days, ending today or earlier.');
   const selected={question:input.question,from,to,granularity:input.granularity||'day',size:input.size||'all',
     category:input.category||'all',position:input.position??'all',strategy:input.strategy||'all',
+    comparison:input.question==='bq9' ? input.comparison||'all' : 'all',
+    confirmationDays:input.question==='bq9' ? input.confirmationDays ?? 7 : 7,
     excludeInitial:input.question==='bq14' ? input.excludeInitial ?? true : false};
   requireThat(typeof selected.excludeInitial==='boolean','invalid-argument','Invalid initial-confirmation filter.');
   requireThat(['day','week'].includes(selected.granularity) && ['all',...sizes].includes(selected.size) &&
@@ -27,9 +30,16 @@ function filters(input={},now=new Date()) {
     (selected.position==='all'||Number.isInteger(selected.position)&&selected.position>=0&&selected.position<10) &&
     ['all','single_after_30_min','single_after_60_min'].includes(selected.strategy),
   'invalid-argument','Unsupported analytics filter.');
-  requireThat(input.question==='bq3'||selected.category==='all'&&selected.position==='all',
-    'invalid-argument','Category and position apply only to BQ3.');
+  requireThat(['all','with_comparison','without_comparison','unknown'].includes(selected.comparison) &&
+    [1,7,30].includes(selected.confirmationDays),
+  'invalid-argument','Unsupported BQ9 comparison or confirmation window.');
+  requireThat(input.question==='bq3'||selected.position==='all',
+    'invalid-argument','Position applies only to BQ3.');
+  requireThat(['bq3','bq9'].includes(input.question)||selected.category==='all',
+    'invalid-argument','Category applies only to BQ3 or BQ9.');
   requireThat(input.question==='bq14'||selected.strategy==='all','invalid-argument','Strategy applies only to BQ14.');
+  requireThat(input.question==='bq9'||(input.comparison===undefined&&input.confirmationDays===undefined),
+    'invalid-argument','Comparison and confirmation window apply only to BQ9.');
   requireThat(input.question!=='bq2'||selected.size==='all','invalid-argument','Group size is not measured in creation telemetry.');
   return selected;
 }
@@ -43,6 +53,7 @@ function groupDate(day, granularity) {
 // the server. Filters refer to cohort start/exposure/invitation in Bogota.
 function buildActivityAnalytics(source,input,now=new Date(),env='production') {
   const f=filters(input,now), range={from:dayStart(f.from),until:Math.min(dayStart(f.to)+DAY-1,+now)};
+  if(f.question==='bq9') return buildCoordinationAnalytics(source.coordination||[],f,now,env);
   const timestamp=r=>asDate(f.question==='bq2'?r.startedAt:f.question==='bq3'?r.presentedAt:r.invitedAt)?.getTime();
   const candidates=f.question==='bq2'?source.attempts||[]:f.question==='bq3'?source.candidates||[]:source.reminders||[];
   const available=[...new Map(candidates.filter(r=>(r.environment||(f.question==='bq3'?'production':null))===env &&
@@ -73,6 +84,30 @@ function buildActivityAnalytics(source,input,now=new Date(),env='production') {
 
 async function getActivityAnalytics(db,input,now=new Date()) {
   const f=filters(input,now), from=new Date(dayStart(f.from)), until=new Date(Math.min(dayStart(f.to)+DAY-1,+now));
+  if(f.question==='bq9') {
+    const snapshot=await db.collection('activities').where('createdAt','>=',from).where('createdAt','<=',until)
+        .limit(MAX_ROWS+1).get();
+    requireThat(snapshot.size<=MAX_ROWS,'resource-exhausted','This range exceeds 10,000 activities. Choose a smaller range.');
+    const rows=snapshot.docs.map(d=>({id:d.id,...d.data()})), coordination=[];
+    for(let i=0;i<rows.length;i+=200) {
+      const chunk=rows.slice(i,i+200);
+      const measurements=await db.getAll(...chunk.map(r=>db.doc(`coordinationMeasurements/${r.id}`)));
+      chunk.forEach((activity,j)=>{
+        const measurement=measurements[j].data();
+        coordination.push({
+          activityId:activity.id,
+          createdAt:activity.createdAt,
+          category:activity.category,
+          groupSize:activity.planningContext?.groupSizeAtCreation,
+          comparisonUsed:measurement?.comparisonUsed ?? activity.planningContext?.comparisonUsed ?? null,
+          firstConfirmedAt:measurement?.firstConfirmedAt ?? activity.confirmedAt ?? null,
+          environment:activity.analyticsEnvironment==='test' ? 'test' :
+            measurement?.environment || environment(db),
+        });
+      });
+    }
+    return buildActivityAnalytics({coordination},f,now,environment(db));
+  }
   const name=f.question==='bq2'?'creationAttempts':f.question==='bq3'?'slotRecommendations':'reminderMeasurements';
   const field=f.question==='bq2'?'startedAt':f.question==='bq3'?'presentedAt':'invitedAt';
   const snapshot=await db.collection(name).where(field,'>=',from).where(field,'<=',until).limit(MAX_ROWS+1).get();
